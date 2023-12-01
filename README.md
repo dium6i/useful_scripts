@@ -1,2 +1,2 @@
 # useful_scripts
-store some scripts
+To store some scripts useful in model training and model inference.
