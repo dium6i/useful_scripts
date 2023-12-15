@@ -55,10 +55,10 @@ if copy:
 
     copied_imgs = os.path.join(copy_to, 'JPEGImages')
     if not os.path.exists(copied_imgs):
-        os.mkdir(copied_imgs)
+        os.makedirs(copied_imgs)
     copied_xmls = os.path.join(copy_to, 'Annotations')
     if not os.path.exists(copied_xmls):
-        os.mkdir(copied_xmls)
+        os.makedirs(copied_xmls)
 
     for img in found:
         base_name = '.'.join(img.split('.')[:-1])
