@@ -12,18 +12,18 @@ import os
 import xml.etree.ElementTree as ET
 
 
-data = 'path/of/voc/dataset'
+data = r'D:\01_hzwq\15_jlx_dnb\02_dnb'
 imgs = os.path.join(data, 'JPEGImages')
 xmls = os.path.join(data, 'Annotations')
 
-finds = ['cat']  # Labels hope to find.
+finds = ['dnb_blank']  # Labels hope to find.
 i = 0
 f = 10  # Number of images hope to find.
 found = []
 
 skip = False
 copy = True  # Copy found images to other directory.
-copy_to = 'path/of/saving'
+save_dir = r'D:\01_hzwq\15_jlx_dnb\02_dnb\test'
 
 for img in os.listdir(imgs):
     if i == f:  # Found enough images.
@@ -53,10 +53,10 @@ for img in os.listdir(imgs):
 if copy:
     import shutil
 
-    copied_imgs = os.path.join(copy_to, 'JPEGImages')
+    copied_imgs = os.path.join(save_dir, 'JPEGImages')
     if not os.path.exists(copied_imgs):
         os.makedirs(copied_imgs)
-    copied_xmls = os.path.join(copy_to, 'Annotations')
+    copied_xmls = os.path.join(save_dir, 'Annotations')
     if not os.path.exists(copied_xmls):
         os.makedirs(copied_xmls)
 
@@ -65,6 +65,6 @@ if copy:
         xml_path = os.path.join(xmls, base_name + '.xml')
 
         shutil.copyfile(os.path.join(imgs, img), 
-        	os.path.join(copied_imgs, img))
+            os.path.join(copied_imgs, img))
         shutil.copyfile(xml_path,
             os.path.join(copied_xmls, base_name + '.xml'))
