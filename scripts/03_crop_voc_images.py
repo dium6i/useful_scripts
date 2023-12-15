@@ -8,10 +8,11 @@ Update Log:
 
 '''
 
-import cv2
 import os
-from tqdm import tqdm
 import xml.etree.ElementTree as ET
+
+import cv2
+from tqdm import tqdm
 
 
 data = 'path/of/voc/dataset'
