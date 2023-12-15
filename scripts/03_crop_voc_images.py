@@ -19,8 +19,6 @@ data = 'path/of/voc/dataset'
 imgs = os.path.join(data, 'JPEGImages')
 xmls = os.path.join(data, 'Annotations')
 crop = os.path.join(data, 'croped')
-if not os.path.exists(crop):
-    os.mkdir(crop)
 
 crop_all = False  # Weather to crop all labels.
 croped_labels = [  # Labels need to be croped.
@@ -53,7 +51,7 @@ for img in tqdm(os.listdir(imgs), desc="Cropping"):
         # Create folder based on label. 
         obj_dir = os.path.join(crop, label)
         if not os.path.exists(obj_dir):
-            os.mkdir(obj_dir)
+            os.makedirs(obj_dir)
 
         # Crop labels. 
         bndbox = obj.find('bndbox')
