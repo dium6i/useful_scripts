@@ -30,11 +30,11 @@ croped_labels = [  # Labels need to be croped.
 
 for img in tqdm(os.listdir(imgs), desc="Cropping"):
     snippet = img.split('.')
-    base_name = '.'.join(snippet[:-1])
+    base = '.'.join(snippet[:-1])
     ext = snippet[-1]
 
     img_path = os.path.join(imgs, img)
-    xml_path = os.path.join(xmls, base_name + '.xml')
+    xml_path = os.path.join(xmls, base + '.xml')
 
     tree = ET.parse(xml_path)
     root = tree.getroot()
@@ -64,5 +64,5 @@ for img in tqdm(os.listdir(imgs), desc="Cropping"):
         croped = im[box[1]:box[3], box[0]:box[2]]
         
         # Save cropped images. 
-        cv2.imwrite(os.path.join(obj_dir, f'{base_name}_{i}.{ext}'), croped)
+        cv2.imwrite(os.path.join(obj_dir, f'{base}_{i}.{ext}'), croped)
         i += 1
