@@ -5,6 +5,7 @@ Description:
     Count the number of labels and the label size ratios of per class.
 Update Log:
     2024-01-05: File created.
+    2024-01-05: Change some comments and outputs.
 
 '''
 
@@ -189,8 +190,8 @@ def plot_label_ratios(label_ratios, ratios_dir):
     '''
     color = {'height': None, 'width': 'red'}
     for label, ratios in label_ratios.items():
-        for key in ratios.keys():
-            # Plot histogram for height ratios
+        # Plot histogram for height / width ratios
+        for key in ratios.keys(): # key: height, width
             plt.hist(
                 ratios[key], 
                 bins=20, 
@@ -219,4 +220,4 @@ if __name__ == '__main__':
     plot_label_counts(label_counts, save_dir)
     if size_ratio:
         plot_label_ratios(label_ratios, ratios_dir)
-    print(f'Counting completed.\nCounting results saved at {save_dir}.')
+    print(f'Counting completed.\nCounting result(s) saved at {save_dir}.')
