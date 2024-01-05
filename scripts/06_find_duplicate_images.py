@@ -10,6 +10,7 @@ Update Log:
                 improved comparison speed. 
     2023-12-30: Changed some import methods and modified 
                 the corresponding code format.
+    2024-01-05: Add a comment.
 
 '''
 
@@ -355,6 +356,7 @@ def run(params):
 
 
 if __name__ == '__main__':
+    # Setting parameters
     params = {
         'img_file': '/path/of/image.jpg',  # Path of image
         'dataset': '/path/of/dataset',  # Dataset directory
