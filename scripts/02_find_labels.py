@@ -5,6 +5,7 @@ Description:
     Find images with specific labels in VOC dataset. 
 Update Log:
     2024-01-06: File created. 
+    2024-01-07: Add function description. 
 
 '''
 
@@ -16,6 +17,15 @@ from tqdm import tqdm
 
 
 def search_labels(params):
+    '''
+    Search target label name in dataset. 
+
+    Args:
+        params (dict): Parameters. 
+
+    Returns:
+        found (list): List of image names containing target label names. 
+    '''
     params['imgs_dir'] = os.path.join(params['dataset'], params['imgs'])
     params['xmls_dir'] = os.path.join(params['dataset'], params['xmls'])
 
@@ -53,6 +63,16 @@ def search_labels(params):
 
 
 def copy_files(params, found):
+    '''
+    Main process of copying files. 
+
+    Args:
+        params (dict): Parameters. 
+        found (list): List of image names containing target label names. 
+
+    Returns:
+        None.
+    '''
     ph = ''  # Placeholder
     if params['save_dir'] == params['dataset']:
         ph = 'has_target_labels'
