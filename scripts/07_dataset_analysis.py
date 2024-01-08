@@ -223,12 +223,12 @@ def plot_label_ratios(lr, ratios_dir):
                 alpha=0.5,
                 color=color[key],
                 label='Ratio Counts')
-            plt.title(f'{label} {key} Ratios')
+            plt.title(f'{label} {key.capitalize()} Ratios')
             plt.xlabel('Ratio')
             plt.ylabel('Counts')
             plt.legend()
             plt.savefig(
-                os.path.join(ratios_dir, f'{label}_{key}_ratios.jpg'),
+                os.path.join(ratios_dir, f'{label}_{key.capitalize()}_Ratios.jpg'),
                 bbox_inches='tight',
                 pad_inches=0.1,
                 dpi=200)
