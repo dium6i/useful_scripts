@@ -237,7 +237,7 @@ def plot_label_ratios(lr, ratios_dir):
 
 def plot_small_counts(sc, small_dir):
     '''
-    Plot result of label ratios and save detailed info as txt.
+    Plot result of small-label counts and save detailed info as txt.
 
     Args:
         sc (dict): Final result of small-object counts.
