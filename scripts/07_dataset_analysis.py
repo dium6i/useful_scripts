@@ -258,7 +258,7 @@ def plot_small_counts(sc, small_dir):
     plt.title('Small Object Counts')
     plt.ylabel('Counts')
     plt.savefig(
-        os.path.join(small_dir, 'small_label_counts.jpg'),
+        os.path.join(small_dir, 'small_object_counts.jpg'),
         bbox_inches='tight',
         pad_inches=0.1,
         dpi=200)
