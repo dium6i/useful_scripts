@@ -5,7 +5,8 @@ Description:
     Use detection model to inference, auto labeling or visualize results. 
     The current version is only suitable for model inference using FastDeploy.
 Update Log:
-    2023-12-01: File created.
+    2023-12-01: - File created.
+    2024-01-17: - Adjusted colorset.
 
 '''
 
@@ -116,20 +117,22 @@ def draw_boxes(params, img, filtered):
     w, h = image.size
     line_width = int(max(w, h) * 0.003) + 1
 
-    colors = [[  0, 114, 189], [217,  83,  25], [237, 177,  32], [126,  47, 142],
-              [119, 172,  48], [ 77, 190, 238], [162,  20,  47], [ 77,  77,  77],
-              [153, 153, 153], [255,   0,   0], [255, 128,   0], [191, 191,   0],
-              [  0,   0, 255], [170,   0, 255], [ 85,  85,   0], [170, 170, 128],
-              [170,  85,   0], [170, 170,   0], [255,  85,   0], [255, 170,   0],
-              [  0,  85, 128], [  0, 170, 128], [ 85,   0, 128], [ 85,  85, 128],
-              [ 85, 170, 128], [170,   0, 128], [170,  85, 128], [ 85, 170,   0],
-              [255,   0, 128], [255,  85, 128], [255, 170, 128], [  0,  85, 255]]
+    colorset = [
+        [218, 179, 218], [138, 196, 208], [112, 112, 181], [255, 160, 100], 
+        [106, 161, 115], [232, 190,  93], [211, 132, 252], [ 77, 190, 238], 
+        [  0, 170, 128], [196, 100, 132], [205, 110,  70], [153, 153, 153], 
+        [194, 194,  99], [ 74, 134, 255], [ 93,  93, 135], [140, 160,  77], 
+        [255, 185, 155], [255, 107, 112], [165, 103, 190], [202, 202, 202], 
+        [  0, 114, 189], [ 85, 170, 128], [ 60, 106, 117], [250, 118, 153], 
+        [119, 172,  48], [171, 229, 232], [160,  85, 100], [223, 128,  83], 
+        [217, 134, 177], [133, 111, 102], 
+    ]
 
     for i in filtered:
         label_id, label_name, conf, xmin, ymin, xmax, ymax = i
 
         # Determine the color of the label
-        color = tuple(colors[label_id % len(colors)])
+        color = tuple(colorset[label_id % len(colorset)])
 
         # Draw bbox
         draw.rectangle([(xmin, ymin), (xmax, ymax)],
