@@ -16,8 +16,9 @@ Update Log:
     2024-01-16: - Implemented a stacked bar chart feature to accurately
                   display category-wise proportions in the visualization
                   of small objects counting results.
-                - Changed colorset.
-    2024-01-17: - Adjusted colorset and some other stuff.
+                - Adjusted the color scheme.
+    2024-01-17: - Adjusted the color scheme and optimized the 
+                  code architecture.
 
 '''
 
@@ -193,12 +194,13 @@ def build_results_dir(params):
     return save_dir, ratios_dir, small_dir
 
 
-def plot_label_counts(lc, save_dir):
+def plot_label_counts(lc, colorset, save_dir):
     '''
     Plot result of label counts.
 
     Args:
         lc (dict): Final label counts.
+        colorset (list): Colors used to plot.
         save_dir (str): Directory to save results.
 
     Returns:
@@ -208,12 +210,16 @@ def plot_label_counts(lc, save_dir):
     keys = list(lc.keys())
     values = list(lc.values())
 
-    bars = plt.bar(keys, values, alpha=0.5)
+    bars = plt.bar(
+        keys, 
+        values, 
+        color=[colorset[i % len(colorset)] for i in range(len(keys))], 
+        alpha=0.5)
     for x, y in zip(keys, values):
         plt.text(x, y, y, ha='center', va='bottom')
 
     plt.title('Label Counts')
-    plt.xticks(rotation=75)
+    plt.xticks(rotation=90)
     plt.ylabel('Counts')
     plt.savefig(
         os.path.join(save_dir, 'label_counts.jpg'),
@@ -257,13 +263,14 @@ def plot_label_ratios(lr, ratios_dir):
             plt.close()
 
 
-def plot_small_counts(sc, small_dir):
+def plot_small_counts(sc, colorset, small_dir):
     '''
     Plot a stacked bar chart of small-object counts by label and
     save detailed info as txt.
 
     Args:
         sc (dict): Final result of small-object counts.
+        colorset (list): Colors used to plot.
         small_dir (str): Directory of small-objects results.
 
     Returns:
@@ -275,21 +282,10 @@ def plot_small_counts(sc, small_dir):
     unique_labels = set()
     for size in sc.values():
         for item in size:
-            unique_labels.add(item[1])  # Extract labels
+            unique_labels.add(item[1])
 
-    # Colors used for labels
-    colorset = [
-        [218, 179, 218], [138, 196, 208], [112, 112, 181], [255, 160, 100], 
-        [106, 161, 115], [232, 190,  93], [211, 132, 252], [ 77, 190, 238], 
-        [  0, 170, 128], [196, 100, 132], [205, 110,  70], [153, 153, 153], 
-        [194, 194,  99], [ 74, 134, 255], [ 93,  93, 135], [140, 160,  77], 
-        [255, 185, 155], [255, 107, 112], [165, 103, 190], [202, 202, 202], 
-        [  0, 114, 189], [ 85, 170, 128], [ 60, 106, 117], [250, 118, 153], 
-        [119, 172,  48], [171, 229, 232], [160,  85, 100], [223, 128,  83], 
-        [217, 134, 177], [133, 111, 102], 
-    ]
-    colors = [(r/255, g/255, b/255) for r, g, b in colorset]
-    label_to_color = dict(zip(unique_labels, colors))
+    label_to_color = {label: colorset[i % len(colorset)] 
+                      for i, label in enumerate(unique_labels)}
 
     # Prepare data for each size range
     plot_data = {f'{x}x{x}': {label: 0 for label in unique_labels}
@@ -308,7 +304,12 @@ def plot_small_counts(sc, small_dir):
     for label, color in label_to_color.items():
         counts = [plot_data[f'{x}x{x}'][label]
                   for x in params['split_range']]
-        plt.bar(x_labels, counts, bottom=sum_per_cat, label=label, color=color)
+        plt.bar(
+            x_labels, 
+            counts, 
+            bottom=sum_per_cat, 
+            label=label, 
+            color=color)
         sum_per_cat += np.array(counts)
 
     # Make the categories in the bar and the legend has same order.
@@ -324,7 +325,12 @@ def plot_small_counts(sc, small_dir):
     plt.xticks(range(len(params['split_range'])), x_labels)
     plt.xlabel('Size Range')
     plt.ylabel('Counts')
-    plt.legend(handles, labels, title='Labels', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.legend(
+        handles, 
+        labels, 
+        title='Labels', 
+        bbox_to_anchor=(1.05, 1), 
+        loc='upper left')
     plt.tight_layout()
     plt.savefig(os.path.join(small_dir, 'small_object_counts_by_label.jpg'))
     plt.close()
@@ -346,12 +352,25 @@ if __name__ == '__main__':
         'split_range': [10, 25, 50]  # Count label smaller than 10×10, etc.
     }
 
+    # Colors used to plot
+    colorset = [
+        [218, 179, 218], [138, 196, 208], [112, 112, 181], [255, 160, 100], 
+        [106, 161, 115], [232, 190,  93], [211, 132, 252], [ 77, 190, 238], 
+        [  0, 170, 128], [196, 100, 132], [205, 110,  70], [153, 153, 153], 
+        [194, 194,  99], [ 74, 134, 255], [ 93,  93, 135], [140, 160,  77], 
+        [255, 185, 155], [255, 107, 112], [165, 103, 190], [202, 202, 202], 
+        [  0, 114, 189], [ 85, 170, 128], [ 60, 106, 117], [250, 118, 153], 
+        [119, 172,  48], [171, 229, 232], [160,  85, 100], [223, 128,  83], 
+        [217, 134, 177], [133, 111, 102], 
+    ]
+    colorset = [(r/255, g/255, b/255) for r, g, b in colorset]
+
     # Main process
     lc, lr, sc = count(params)
     save_dir, ratios_dir, small_dir = build_results_dir(params)
-    plot_label_counts(lc, save_dir)
+    plot_label_counts(lc, colorset, save_dir)
     if params['size_ratio']:
         plot_label_ratios(lr, ratios_dir)
     if params['small_object']:
-        plot_small_counts(sc, small_dir)
+        plot_small_counts(sc, colorset, small_dir)
     print(f'Counting completed.\nCounting result(s) saved at {save_dir}.')
