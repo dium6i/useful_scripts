@@ -17,6 +17,7 @@ Update Log:
                   display category-wise proportions in the visualization
                   of small objects counting results.
                 - Changed colorset.
+    2024-01-17: - Adjusted colorset and some other stuff.
 
 '''
 
@@ -43,20 +44,20 @@ def process_xml(params, xml):
         lc (dict): Label counts.
                    lc = {'cat': 5, 'dog': 7}
         lr (dict): Label size ratios.
-                   lr = {'cat': {'height': [0.2, 0.6], 'width': [0.4, 0.8]},
-                         'dog': {'height': [0.3, 0.7], 'width': [0.5, 0.6]}}
+                   lr = {'cat': {'Height': [0.2, 0.6], 'Width': [0.4, 0.8]},
+                         'dog': {'Height': [0.3, 0.7], 'Width': [0.5, 0.6]}}
         sc (dict): Small-object counts.
                    sc = {'10x10': ['image1.xml', 'image2.xml'],
                          '25x25': ['image3.xml', 'image4.xml'],
                          '50x50': ['image5.xml', 'image6.xml']}
     '''
     lc = defaultdict(int)
-    lr = defaultdict(lambda: {'height': [], 'width': []})
+    lr = defaultdict(lambda: {'Height': [], 'Width': []})
     sc = {f'{x}x{x}': [] for x in params['split_range']}
 
     xml_path = os.path.join(params['xmls'], xml)
 
-    # Ignore ".ipynb_checkpoints" when using jupyter
+    # Ignore hidden directory
     if os.path.isdir(xml_path):
         return lc, lr, sc
 
@@ -66,8 +67,8 @@ def process_xml(params, xml):
 
     if params['size_ratio']:
         size = root.find('size')
-        im_w = int(size.find('width').text)
         im_h = int(size.find('height').text)
+        im_w = int(size.find('width').text)
 
     for obj in root.iter('object'):
         name = obj.find('name').text
@@ -81,15 +82,15 @@ def process_xml(params, xml):
             if params['size_ratio']:
                 h_ratio = (ymax - ymin) / im_h
                 w_ratio = (xmax - xmin) / im_w
-                lr[name]['height'].append(h_ratio)
-                lr[name]['width'].append(w_ratio)
+                lr[name]['Height'].append(h_ratio)
+                lr[name]['Width'].append(w_ratio)
 
             if params['small_object']:
                 w, h = (xmax - xmin, ymax - ymin)
                 for i in sorted(params['split_range']):
                     if w < i and h < i:
                         # (image1.xml, cat, w: 20, h: 25)
-                        details = (xml, name, f'w: {w}', f'h: {h}')
+                        details = (xml, name, f'h:{h}', f'w:{w}')
                         sc[f'{i}x{i}'].append(details)
                         break
 
@@ -119,9 +120,9 @@ def merge_counts(lc, lr, sc, new_lc, new_lr, new_sc):
     # Merge label ratios
     for label, ratios in new_lr.items():
         if label not in lr:
-            lr[label] = {'height': [], 'width': []}
-        lr[label]['height'].extend(ratios['height'])
-        lr[label]['width'].extend(ratios['width'])
+            lr[label] = {'Height': [], 'Width': []}
+        lr[label]['Height'].extend(ratios['Height'])
+        lr[label]['Width'].extend(ratios['Width'])
 
     # Merge small-object counts
     for sr, count in new_sc.items():
@@ -234,22 +235,22 @@ def plot_label_ratios(lr, ratios_dir):
         None.
     '''
     print('Plotting label ratios...')
-    color = {'height': None, 'width': 'red'}
+    color = {'Height': None, 'Width': 'red'}
     for label, ratios in lr.items():
         # Plot histogram for height / width ratios
-        for key in ratios.keys():  # key: height, width
+        for key in ratios.keys():  # key: Height, Width
             plt.hist(
                 ratios[key],
                 bins=20,
                 alpha=0.5,
                 color=color[key],
                 label='Ratio Counts')
-            plt.title(f'{label} {key.capitalize()} Ratios')
+            plt.title(f'{label} {key} Ratios')
             plt.xlabel('Ratio')
             plt.ylabel('Counts')
             plt.legend()
             plt.savefig(
-                os.path.join(ratios_dir, f'{label}_{key.capitalize()}_Ratios.jpg'),
+                os.path.join(ratios_dir, f'{label}_{key}_Ratios.jpg'),
                 bbox_inches='tight',
                 pad_inches=0.1,
                 dpi=200)
@@ -277,15 +278,15 @@ def plot_small_counts(sc, small_dir):
             unique_labels.add(item[1])  # Extract labels
 
     # Colors used for labels
-    colorset = [ # 30 colors
-        [218, 179, 218], [252,  65,  65], [138, 196, 208], [112, 112, 181], 
-        [251, 102,   2], [106, 161, 115], [232, 190,  93], [205, 111, 252], 
-        [  0, 170, 128], [ 55, 121, 252], [120, 146,  44], [255, 170, 128], 
-        [  0, 114, 189], [119, 172,  48], [ 77, 190, 238], [199,  56, 102], 
-        [171, 229, 232], [ 85, 170, 128], [255,  85, 128], [165, 103, 190], 
-        [202, 202, 202], [ 85,  85, 128], [162,  20,  47], [223, 128,  83], 
-        [  0,  85, 128], [217,  83,  25], [217, 134, 177], [128,  97,  84], 
-        [191, 191,   0], [153, 153, 153], 
+    colorset = [
+        [218, 179, 218], [138, 196, 208], [112, 112, 181], [255, 160, 100], 
+        [106, 161, 115], [232, 190,  93], [211, 132, 252], [ 77, 190, 238], 
+        [  0, 170, 128], [196, 100, 132], [205, 110,  70], [153, 153, 153], 
+        [194, 194,  99], [ 74, 134, 255], [ 93,  93, 135], [140, 160,  77], 
+        [255, 185, 155], [255, 107, 112], [165, 103, 190], [202, 202, 202], 
+        [  0, 114, 189], [ 85, 170, 128], [ 60, 106, 117], [250, 118, 153], 
+        [119, 172,  48], [171, 229, 232], [160,  85, 100], [223, 128,  83], 
+        [217, 134, 177], [133, 111, 102], 
     ]
     colors = [(r/255, g/255, b/255) for r, g, b in colorset]
     label_to_color = dict(zip(unique_labels, colors))
@@ -310,9 +311,8 @@ def plot_small_counts(sc, small_dir):
         plt.bar(x_labels, counts, bottom=sum_per_cat, label=label, color=color)
         sum_per_cat += np.array(counts)
 
-    # Get the handle and label of the current chart
-    handles, labels = plt.gca().get_legend_handles_labels()
     # Make the categories in the bar and the legend has same order.
+    handles, labels = plt.gca().get_legend_handles_labels()
     handles.reverse()
     labels.reverse()
 
