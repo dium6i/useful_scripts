@@ -7,6 +7,8 @@ Description:
 Update Log:
     2023-12-01: - File created.
     2024-01-17: - Adjusted colorset.
+    2024-01-18: - Optimized the label rendering in visualizations.
+                - Renamed some variables to streamline the codebase.
 
 '''
 
@@ -115,7 +117,7 @@ def draw_boxes(params, img, filtered):
 
     # Determines the line width of bboxes
     w, h = image.size
-    line_width = int(max(w, h) * 0.003) + 1
+    lw = int(max(w, h) * 0.003) + 1 # line width
 
     colorset = [
         [218, 179, 218], [138, 196, 208], [112, 112, 181], [255, 160, 100], 
@@ -136,10 +138,10 @@ def draw_boxes(params, img, filtered):
 
         # Draw bbox
         draw.rectangle([(xmin, ymin), (xmax, ymax)],
-                       outline=color, width=line_width)
+                       outline=color, width=lw)
 
         # Draw label
-        text = f'{label_name} {conf * 100:.2f}% '
+        text = f'{label_name} {conf * 100:.2f}%'
         if min(w, h) < 600:
             th = 12
         else:
@@ -148,23 +150,28 @@ def draw_boxes(params, img, filtered):
         font = ImageFont.truetype(params['font_dir'], th)
         tw = draw.textlength(text, font=font)
 
-        label_x1 = xmin
-        label_y1 = ymin - th - line_width
-        label_x2 = xmin + tw + line_width
-        label_y2 = ymin
+        x1 = xmin
+        y1 = ymin - th - lw
+        x2 = xmin + tw + lw
+        y2 = ymin
 
-        if label_y1 < 10:  # Label-top out of image
-            label_y1 = ymin
-            label_y2 = ymin + th + line_width
+        if y1 < 10:  # Label-top out of image
+            y1 = ymin
+            y2 = ymin + th + lw
 
-        if label_x2 > w:  # Label-right out of image
-            label_x1 = w - tw - line_width
-            label_x2 = w
+        if x2 > w:  # Label-right out of image
+            x1 = w - tw - lw
+            x2 = w
 
-        draw.rectangle([(label_x1, label_y1), (label_x2, label_y2)],
-                       fill=color, width=line_width)
-        draw.text((label_x1 + line_width, label_y1 + line_width),
-                  text, font=font, fill=(255, 255, 255))
+        draw.rectangle(
+            [(x1, y1), (x2 + lw, y2)], 
+            fill=color, 
+            width=lw)
+        draw.text(
+            (x1 + lw, y1 + lw), 
+            text, 
+            font=font, 
+            fill=(255, 255, 255))
 
     return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
@@ -269,10 +276,8 @@ def image_prediction(params, filename, model, im):
             xml_file.write(xmlstr)
 
     if params['visualize']:
-        cv2.imwrite(
-            os.path.join(params['visual_dir'], filename), 
-            draw_boxes(params, im, data)
-            )
+        vis_img = draw_boxes(params, im, data)
+        cv2.imwrite(os.path.join(params['visual_dir'], filename), vis_img)
 
     return data
 
