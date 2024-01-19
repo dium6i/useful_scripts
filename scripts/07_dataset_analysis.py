@@ -19,6 +19,9 @@ Update Log:
                 - Adjusted the color scheme.
     2024-01-17: - Adjusted the color scheme and optimized the 
                   code architecture.
+    2024-01-20: - Adjusted the color scheme and transitioned the criterion 
+                  for determining small labels from pixel-based measurements 
+                  to percentage of image area.
 
 '''
 
@@ -66,7 +69,9 @@ def process_xml(params, xml):
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
-    if params['size_ratio']:
+    get_image_size = params['size_ratio'] or params['small_object']
+
+    if get_image_size:
         size = root.find('size')
         im_h = int(size.find('height').text)
         im_w = int(size.find('width').text)
@@ -75,23 +80,25 @@ def process_xml(params, xml):
         name = obj.find('name').text
         lc[name] += 1
 
-        if params['size_ratio'] or params['small_object']:
+        if get_image_size:
             bbox = obj.find('bndbox')
             xmin, ymin, xmax, ymax = (int(bbox.find(pos).text) for pos in [
                                       'xmin', 'ymin', 'xmax', 'ymax'])
+            h_ratio = (ymax - ymin) / im_h
+            w_ratio = (xmax - xmin) / im_w
 
             if params['size_ratio']:
-                h_ratio = (ymax - ymin) / im_h
-                w_ratio = (xmax - xmin) / im_w
                 lr[name]['Height'].append(h_ratio)
                 lr[name]['Width'].append(w_ratio)
 
             if params['small_object']:
-                w, h = (xmax - xmin, ymax - ymin)
                 for i in sorted(params['split_range']):
-                    if w < i and h < i:
-                        # (image1.xml, cat, w: 20, h: 25)
-                        details = (xml, name, f'h:{h}', f'w:{w}')
+                    if h_ratio < i / 100 and w_ratio < i / 100:
+                        details = (  # (image1.xml, cat, w: 0.2153, h: 0.2507)
+                            xml, 
+                            name, 
+                            f'h:{h_ratio:.4f}', 
+                            f'w:{w_ratio:.4f}')
                         sc[f'{i}x{i}'].append(details)
                         break
 
@@ -295,7 +302,7 @@ def plot_small_counts(sc, colorset, small_dir):
             label = item[1]
             plot_data[size][label] += 1
 
-    x_labels = [f'< {x}x{x}' for x in params['split_range']]
+    x_labels = [f'< {x}% x {x}%' for x in params['split_range']]
 
     # Draw stacked bar chart
     plt.figure(figsize=(10, 6))
@@ -337,7 +344,7 @@ def plot_small_counts(sc, colorset, small_dir):
 
     # Save detailed info
     for x in params['split_range']:
-        filename = os.path.join(small_dir, f'smaller_than_{x}x{x}.txt')
+        filename = os.path.join(small_dir, f'smaller_than_{x}%x{x}%.txt')
         with open(filename, 'w') as f:
             for i in sc[f'{x}x{x}']:
                 f.write(' '.join(map(str, i)) + '\n')
@@ -347,17 +354,17 @@ if __name__ == '__main__':
     # Setting parameters
     params = {
         'xmls': 'path/of/xml/files',  # Directory of annotations.
-        'size_ratio': True,  # Weather to count label size ratio.
+        'size_ratio': True,  # Weather to count size ratio per class.
         'small_object': True,  # Weather to count small objects.
-        'split_range': [10, 25, 50]  # Count label smaller than 10×10, etc.
+        'split_range': [1, 2, 3, 4, 5]  # Count label smaller than 1% × 1%, etc.
     }
 
     # Colors used to plot
     colorset = [
         [218, 179, 218], [138, 196, 208], [112, 112, 181], [255, 160, 100], 
         [106, 161, 115], [232, 190,  93], [211, 132, 252], [ 77, 190, 238], 
-        [  0, 170, 128], [196, 100, 132], [205, 110,  70], [153, 153, 153], 
-        [194, 194,  99], [ 74, 134, 255], [ 93,  93, 135], [140, 160,  77], 
+        [  0, 170, 128], [196, 100, 132], [153, 153, 153], [194, 194,  99], 
+        [ 74, 134, 255], [205, 110,  70], [ 93,  93, 135], [140, 160,  77], 
         [255, 185, 155], [255, 107, 112], [165, 103, 190], [202, 202, 202], 
         [  0, 114, 189], [ 85, 170, 128], [ 60, 106, 117], [250, 118, 153], 
         [119, 172,  48], [171, 229, 232], [160,  85, 100], [223, 128,  83], 
