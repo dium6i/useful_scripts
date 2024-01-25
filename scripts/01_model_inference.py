@@ -9,6 +9,9 @@ Update Log:
     2024-01-17: - Adjusted colorset.
     2024-01-18: - Optimized the label rendering in visualizations.
                 - Renamed some variables to streamline the codebase.
+    2024-01-25: - Added a new feature to toggle the visibility of labels 
+                  during visualization, offering more customization to the 
+                  user experience.
 
 '''
 
@@ -140,38 +143,39 @@ def draw_boxes(params, img, filtered):
         draw.rectangle([(xmin, ymin), (xmax, ymax)],
                        outline=color, width=lw)
 
-        # Draw label
-        text = f'{label_name} {conf * 100:.2f}%'
-        if min(w, h) < 600:
-            th = 12
-        else:
-            th = int(max(w, h) * 0.015)
+        if params['show_label']:
+            # Draw label
+            text = f'{label_name} {conf * 100:.2f}%'
+            if min(w, h) < 600:
+                th = 12
+            else:
+                th = int(max(w, h) * 0.015)
 
-        font = ImageFont.truetype(params['font_dir'], th)
-        tw = draw.textlength(text, font=font)
+            font = ImageFont.truetype(params['font_dir'], th)
+            tw = draw.textlength(text, font=font)
 
-        x1 = xmin
-        y1 = ymin - th - lw
-        x2 = xmin + tw + lw
-        y2 = ymin
+            x1 = xmin
+            y1 = ymin - th - lw
+            x2 = xmin + tw + lw
+            y2 = ymin
 
-        if y1 < 10:  # Label-top out of image
-            y1 = ymin
-            y2 = ymin + th + lw
+            if y1 < 10:  # Label-top out of image
+                y1 = ymin
+                y2 = ymin + th + lw
 
-        if x2 > w:  # Label-right out of image
-            x1 = w - tw - lw
-            x2 = w
+            if x2 > w:  # Label-right out of image
+                x1 = w - tw - lw
+                x2 = w
 
-        draw.rectangle(
-            [(x1, y1), (x2 + lw, y2)], 
-            fill=color, 
-            width=lw)
-        draw.text(
-            (x1 + lw, y1 + lw), 
-            text, 
-            font=font, 
-            fill=(255, 255, 255))
+            draw.rectangle(
+                [(x1, y1), (x2 + lw, y2)], 
+                fill=color, 
+                width=lw)
+            draw.text(
+                (x1 + lw, y1 + lw), 
+                text, 
+                font=font, 
+                fill=(255, 255, 255))
 
     return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
@@ -334,6 +338,7 @@ if __name__ == '__main__':
         'confs': 0.5, # Threshold for filtering results, 'float' for all labels, 'list' for each.
         'save_xml': True,  # Whether to save detection results to XML files
         'visualize': True,  # Whether to visualize detection results
+        'show_label': True,  # Whether to show labels of bboxes while visualization
         'include': None,  # Label ids to include, like [1, 2, 7, 8, 9]
         'exclude': None  # Label ids to exclude
     }
