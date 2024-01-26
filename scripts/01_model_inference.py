@@ -12,6 +12,8 @@ Update Log:
     2024-01-25: - Added a new feature to toggle the visibility of labels 
                   during visualization, offering more customization to the 
                   user experience.
+    2024-01-26: - Fixed a parsing error that occurred when file names 
+                  contained multiple periods.
 
 '''
 
@@ -263,9 +265,10 @@ def image_prediction(params, filename, model, im):
     Returns:
         None.
     '''
-    base, ext = filename.split('.')
-    dot_ext = '.' + ext  # .jpg
-    xml = filename.replace(dot_ext, '.xml')
+    snippet = filename.split('.')
+    base = '.'.join(snippet[:-1])
+    dot_ext = '.' + snippet[-1]  # .jpg
+    xml = base + '.xml'
 
     results = model.predict(im)
     data = filter_res(
