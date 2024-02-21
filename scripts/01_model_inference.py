@@ -14,6 +14,7 @@ Update Log:
                   user experience.
     2024-01-26: - Fixed a parsing error that occurred when file names 
                   contained multiple periods.
+    2024-02-21: - Fixed a parsing error that occurred on Windows platform. 
 
 '''
 
@@ -24,9 +25,11 @@ import xml.etree.ElementTree as ET
 import cv2
 import fastdeploy as fd
 from fastdeploy import ModelFormat
+import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from tqdm import tqdm
+# from tqdm import tqdm
+from tqdm.notebook import tqdm  # Using jupyter lab
 import yaml
 
 
@@ -35,7 +38,7 @@ def read_labels(cfg_path):
     Read config file to load model labels.
 
     Args:
-        cfg_path (string): Path of 'infer_cfg.yml' of inference model.
+        cfg_path (str): Path of 'infer_cfg.yml' of inference model.
 
     Returns:
         data['label_list'] (list): Model labels. # ['preson', 'cat', 'dog']
@@ -188,11 +191,11 @@ def generate_XML(data, file_name, img_shape):
 
     Args:
         data (list): Filtered and reorganized results.
-        file_name (string): Filename.
+        file_name (str): Filename.
         img_shape (tuple): Shape of an image. # (h, w, c)
 
     Returns:
-        xmlstr (string): XML document as a string with proper indentation.
+        xmlstr (str): XML document as a string with proper indentation.
     '''
     # Create the root element
     annotation = ET.Element('annotation')
@@ -250,7 +253,7 @@ def generate_XML(data, file_name, img_shape):
     return xmlstr
 
 
-def image_prediction(params, filename, model, im):
+def image_prediction(params, filename, model, img_path):
     '''
     Performs single-image processing, including model inference, 
     results reorganizing, XML file generation, and visualization 
@@ -258,9 +261,9 @@ def image_prediction(params, filename, model, im):
 
     Args:
         params (dict): Parameters.
-        filename (string): Filename.
+        filename (str): Filename.
         model (fd.model): Model to predict images.
-        im (numpy.ndarray): Read by OpenCV.
+        img_path (str): Image path.
 
     Returns:
         None.
@@ -270,6 +273,7 @@ def image_prediction(params, filename, model, im):
     dot_ext = '.' + snippet[-1]  # .jpg
     xml = base + '.xml'
 
+    im = cv2.imread(img_path)
     results = model.predict(im)
     data = filter_res(
         params,
@@ -285,6 +289,12 @@ def image_prediction(params, filename, model, im):
     if params['visualize']:
         vis_img = draw_boxes(params, im, data)
         cv2.imwrite(os.path.join(params['visual_dir'], filename), vis_img)
+
+        # Show single file inference result when using jupyter lab
+        if os.path.isfile(params['img_dir']):
+            plt.imshow(cv2.cvtColor(vis_img, cv2.COLOR_BGR2RGB))
+            plt.axis('off')
+            plt.show()
 
     return data
 
@@ -313,11 +323,13 @@ def run(params, model):
 
     # Single file prediction
     if os.path.isfile(params['img_dir']):
-        filename = params['img_dir'].split('/')[-1]  # abc.jpg
-        im = cv2.imread(params['img_dir'])
+        path_snippets = params['img_dir'].split('/')
+        if len(path_snippets) < 2:  # Split failed
+            filename = params['img_dir'].split('\\')[-1]  # abc.jpg
+        else:
+            filename = path_snippets[-1]  # abc.jpg
 
-        data = image_prediction(params, filename, model, im)
-        print('')
+        data = image_prediction(params, filename, model, params['img_dir'])
         print(data)
 
     # Batch prediction
@@ -327,9 +339,7 @@ def run(params, model):
                 continue
 
             img_path = os.path.join(params['img_dir'], filename)
-            im = cv2.imread(img_path)
-
-            image_prediction(params, filename, model, im)
+            image_prediction(params, filename, model, img_path)
 
 
 if __name__ == '__main__':
