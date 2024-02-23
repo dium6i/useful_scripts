@@ -22,7 +22,7 @@ Update Log:
     2024-01-20: - Adjusted the color scheme and transitioned the criterion
                   for determining small labels from pixel-based measurements
                   to percentage of image area.
-    2024-02-23: - Changed the type of colorset.
+    2024-02-23: - Changed the type of colorset and code structure.
 
 '''
 
@@ -352,14 +352,6 @@ def plot_small_counts(sc, colorset, small_dir):
 
 
 if __name__ == '__main__':
-    # Setting parameters
-    params = {
-        'xmls': 'path/of/xml/files',  # Directory of annotations.
-        'size_ratio': True,  # Weather to count size ratio per class.
-        'small_object': True,  # Weather to count small objects.
-        'split_range': [1, 2, 3, 4, 5]  # Count label smaller than 1% × 1%, etc.
-    }
-
     # Colors used to plot
     colorset = [
         (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
@@ -372,6 +364,14 @@ if __name__ == '__main__':
         (217, 134, 177), (133, 111, 102), 
     ]
     colorset = [(r/255, g/255, b/255) for r, g, b in colorset]
+
+    # Setting parameters
+    params = {
+        'xmls': 'path/of/xml/files',  # Directory of annotations.
+        'size_ratio': True,  # Weather to count size ratio per class.
+        'small_object': True,  # Weather to count small objects.
+        'split_range': [1, 2, 3, 4, 5]  # Count label smaller than 1% × 1%, etc.
+    }
 
     # Main process
     lc, lr, sc = count(params)
