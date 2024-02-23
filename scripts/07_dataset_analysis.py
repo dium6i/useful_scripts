@@ -17,11 +17,12 @@ Update Log:
                   display category-wise proportions in the visualization
                   of small objects counting results.
                 - Adjusted the color scheme.
-    2024-01-17: - Adjusted the color scheme and optimized the 
+    2024-01-17: - Adjusted the color scheme and optimized the
                   code architecture.
-    2024-01-20: - Adjusted the color scheme and transitioned the criterion 
-                  for determining small labels from pixel-based measurements 
+    2024-01-20: - Adjusted the color scheme and transitioned the criterion
+                  for determining small labels from pixel-based measurements
                   to percentage of image area.
+    2024-02-23: - Changed the type of colorset.
 
 '''
 
@@ -361,14 +362,14 @@ if __name__ == '__main__':
 
     # Colors used to plot
     colorset = [
-        [218, 179, 218], [138, 196, 208], [112, 112, 181], [255, 160, 100], 
-        [106, 161, 115], [232, 190,  93], [211, 132, 252], [ 77, 190, 238], 
-        [  0, 170, 128], [196, 100, 132], [153, 153, 153], [194, 194,  99], 
-        [ 74, 134, 255], [205, 110,  70], [ 93,  93, 135], [140, 160,  77], 
-        [255, 185, 155], [255, 107, 112], [165, 103, 190], [202, 202, 202], 
-        [  0, 114, 189], [ 85, 170, 128], [ 60, 106, 117], [250, 118, 153], 
-        [119, 172,  48], [171, 229, 232], [160,  85, 100], [223, 128,  83], 
-        [217, 134, 177], [133, 111, 102], 
+        (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
+        (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
+        (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
+        ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
+        (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
+        (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
+        (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
+        (217, 134, 177), (133, 111, 102), 
     ]
     colorset = [(r/255, g/255, b/255) for r, g, b in colorset]
 
