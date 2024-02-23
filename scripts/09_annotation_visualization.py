@@ -5,10 +5,11 @@ Description:
     Visualize VOC annotations to check whether wrong labeling exists.
 Update Log:
     2024-02-23: - File created.
+                - Optimized the use of multi-threading.
 
 '''
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import os
 
 from PIL import Image, ImageDraw, ImageFont
@@ -60,7 +61,7 @@ def read_xml(xml_path):
     return results
 
 
-def draw_bbox(params, image, results):
+def draw_bbox(params, image):
     '''
     Draw bbox and label on image and save it.
 
@@ -72,15 +73,22 @@ def draw_bbox(params, image, results):
     Returns:
         None.
     '''
+    # Get annotations
+    snippet = image.split('.')
+    base = '.'.join(snippet[:-1])  # Avoid filename like abc.def.jpg
+    xml = base + '.xml'
+    xml_path = os.path.join(params['xmls'], xml)
+    results = read_xml(xml_path)
+
     colors = [
-        [218, 179, 218], [138, 196, 208], [112, 112, 181], [255, 160, 100], 
-        [106, 161, 115], [232, 190,  93], [211, 132, 252], [ 77, 190, 238], 
-        [  0, 170, 128], [196, 100, 132], [153, 153, 153], [194, 194,  99], 
-        [ 74, 134, 255], [205, 110,  70], [ 93,  93, 135], [140, 160,  77], 
-        [255, 185, 155], [255, 107, 112], [165, 103, 190], [202, 202, 202], 
-        [  0, 114, 189], [ 85, 170, 128], [ 60, 106, 117], [250, 118, 153], 
-        [119, 172,  48], [171, 229, 232], [160,  85, 100], [223, 128,  83], 
-        [217, 134, 177], [133, 111, 102], 
+        (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
+        (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
+        (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
+        ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
+        (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
+        (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
+        (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
+        (217, 134, 177), (133, 111, 102), 
     ]
 
     img_path = os.path.join(params['imgs'], image)
@@ -95,7 +103,7 @@ def draw_bbox(params, image, results):
 
     for i in results:
         label, xmin, ymin, xmax, ymax = i
-        color = tuple(colors[params['labels'].index(label)])
+        color = colors[params['labels'].index(label)]
 
         draw.rectangle([(xmin, ymin), (xmax, ymax)],
                        outline=color, width=line_width)
@@ -143,19 +151,11 @@ def run(params):
     params = reprocess_params(params)
 
     # Process each image in parallel
-    with ThreadPoolExecutor() as executor:
-        futures = []
-
-        for image in os.listdir(params['imgs']):
-            snippet = image.split('.')
-            base = '.'.join(snippet[:-1])  # Avoid filename like abc.def.jpg
-            xml = base + '.xml'
-            xml_path = os.path.join(params['xmls'], xml)
-
-            results = read_xml(xml_path)
-
-            future = executor.submit(draw_bbox, params, image, results)
-            futures.append(future)
+    with ProcessPoolExecutor() as executor:
+        images = os.listdir(params['imgs'])
+        futures = [
+            executor.submit(draw_bbox, params, image) for image in images
+        ]
 
         for future in tqdm(
                 as_completed(futures),
