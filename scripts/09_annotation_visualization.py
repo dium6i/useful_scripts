@@ -5,7 +5,7 @@ Description:
     Visualize VOC annotations to check whether wrong labeling exists.
 Update Log:
     2024-02-23: - File created.
-                - Optimized the use of multi-threading and the effect 
+                - Optimized the use of multiprocessing and the effect 
                   of visualization.
 
 '''
