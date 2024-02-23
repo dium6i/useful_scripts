@@ -2,19 +2,20 @@
 Author: Wei Qin
 Date: 2023-12-01
 Description:
-    Use detection model to inference, auto labeling or visualize results. 
+    Use detection model to inference, auto labeling or visualize results.
     The current version is only suitable for model inference using FastDeploy.
 Update Log:
     2023-12-01: - File created.
     2024-01-17: - Adjusted colorset.
     2024-01-18: - Optimized the label rendering in visualizations.
                 - Renamed some variables to streamline the codebase.
-    2024-01-25: - Added a new feature to toggle the visibility of labels 
-                  during visualization, offering more customization to the 
+    2024-01-25: - Added a new feature to toggle the visibility of labels
+                  during visualization, offering more customization to the
                   user experience.
-    2024-01-26: - Fixed a parsing error that occurred when file names 
+    2024-01-26: - Fixed a parsing error that occurred when file names
                   contained multiple periods.
-    2024-02-21: - Fixed a parsing error that occurred on Windows platform. 
+    2024-02-21: - Fixed a parsing error that occurred on Windows platform.
+    2024-02-23: - Changed the type of colorset.
 
 '''
 
@@ -128,21 +129,21 @@ def draw_boxes(params, img, filtered):
     lw = int(max(w, h) * 0.003) + 1 # line width
 
     colorset = [
-        [218, 179, 218], [138, 196, 208], [112, 112, 181], [255, 160, 100], 
-        [106, 161, 115], [232, 190,  93], [211, 132, 252], [ 77, 190, 238], 
-        [  0, 170, 128], [196, 100, 132], [205, 110,  70], [153, 153, 153], 
-        [194, 194,  99], [ 74, 134, 255], [ 93,  93, 135], [140, 160,  77], 
-        [255, 185, 155], [255, 107, 112], [165, 103, 190], [202, 202, 202], 
-        [  0, 114, 189], [ 85, 170, 128], [ 60, 106, 117], [250, 118, 153], 
-        [119, 172,  48], [171, 229, 232], [160,  85, 100], [223, 128,  83], 
-        [217, 134, 177], [133, 111, 102], 
+        (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
+        (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
+        (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
+        ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
+        (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
+        (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
+        (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
+        (217, 134, 177), (133, 111, 102), 
     ]
 
     for i in filtered:
         label_id, label_name, conf, xmin, ymin, xmax, ymax = i
 
         # Determine the color of the label
-        color = tuple(colorset[label_id % len(colorset)])
+        color = colorset[label_id % len(colorset)]
 
         # Draw bbox
         draw.rectangle([(xmin, ymin), (xmax, ymax)],
