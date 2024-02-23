@@ -5,7 +5,8 @@ Description:
     Visualize VOC annotations to check whether wrong labeling exists.
 Update Log:
     2024-02-23: - File created.
-                - Optimized the use of multi-threading.
+                - Optimized the use of multi-threading and the effect 
+                  of visualization.
 
 '''
 
@@ -99,14 +100,14 @@ def draw_bbox(params, image):
     draw = ImageDraw.Draw(im)
 
     w, h = im.size
-    line_width = int(max(w, h) * 0.003) + 1
+    lw = int(max(w, h) * 0.003) + 1
 
     for i in results:
         label, xmin, ymin, xmax, ymax = i
         color = colors[params['labels'].index(label)]
 
         draw.rectangle([(xmin, ymin), (xmax, ymax)],
-                       outline=color, width=line_width)
+                       outline=color, width=lw)
 
         # Draw label
         if min(w, h) < 600:
@@ -117,23 +118,28 @@ def draw_bbox(params, image):
         font = ImageFont.truetype(params['font_dir'], th)
         tw = draw.textlength(label, font=font)
 
-        label_x1 = xmin
-        label_y1 = ymin - th - line_width
-        label_x2 = xmin + tw + line_width
-        label_y2 = ymin
+        x1 = xmin
+        y1 = ymin - th - lw
+        x2 = xmin + tw + lw
+        y2 = ymin
 
-        if label_y1 < 10:  # Label-top out of image
-            label_y1 = ymin
-            label_y2 = ymin + th + line_width
+        if y1 < 10:  # Label-top out of image
+            y1 = ymin
+            y2 = ymin + th + lw
 
-        if label_x2 > w:  # Label-right out of image
-            label_x1 = w - tw - line_width
-            label_x2 = w
+        if x2 > w:  # Label-right out of image
+            x1 = w - tw - lw
+            x2 = w
 
-        draw.rectangle([(label_x1, label_y1), (label_x2, label_y2)],
-                       fill=color, width=line_width)
-        draw.text((label_x1 + line_width, label_y1 + line_width),
-                  label, font=font, fill=(255, 255, 255))
+        draw.rectangle(
+            [(x1, y1), (x2 + lw, y2)], 
+            fill=color, 
+            width=lw)
+        draw.text(
+            (x1 + lw, y1 + lw), 
+            label, 
+            font=font, 
+            fill=(255, 255, 255))
 
         im.save(os.path.join(params['save'], image), quality=95)
 
