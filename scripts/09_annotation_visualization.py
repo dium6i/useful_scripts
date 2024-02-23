@@ -7,6 +7,7 @@ Update Log:
     2024-02-23: - File created.
                 - Optimized the use of multiprocessing and the effect 
                   of visualization.
+                - Fixed a bug where unlabeled images were not saved.
 
 '''
 
@@ -141,7 +142,7 @@ def draw_bbox(params, image):
             font=font, 
             fill=(255, 255, 255))
 
-        im.save(os.path.join(params['save'], image), quality=95)
+    im.save(os.path.join(params['save'], image), quality=95)
 
 
 def run(params):
