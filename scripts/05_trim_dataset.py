@@ -6,8 +6,9 @@ Description:
     Only for VOC dataset.
 Update Log:
     2023-12-22: - File created.
-    2024-02-27: - Optimized code structure for easier integration
+    2024-02-27: - Optimized code structure for easier integration 
                   into other projects.
+    2024-02-27: - Improved the readability of output results.
 
 '''
 
@@ -38,9 +39,9 @@ def run(params):
             xmls_del.remove(xml)
             imgs_del.remove(img)
 
-    print(f'{len(xmls_del)} label(s) can be deleted: ')
+    print(f'{len(xmls_del)} label(s) can be deleted:')
     print(xmls_del)
-    print(f'{len(imgs_del)} image(s) can be deleted: ')
+    print(f'{len(imgs_del)} image(s) can be deleted:')
     print(imgs_del)
 
     if params['delete']:
@@ -49,7 +50,9 @@ def run(params):
         for i in imgs_del:
             os.remove(os.path.join(imgs, i))
 
-        print(f'{len(xmls_del)} label(s)\n{len(imgs_del)} image(s)\nhave been deleted.')
+        print(f'\n{len(xmls_del)} label(s)')
+        print(f'{len(imgs_del)} image(s)')
+        print('have been deleted.')
 
 
 if __name__ == '__main__':
