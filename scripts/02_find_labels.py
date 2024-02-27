@@ -9,6 +9,7 @@ Update Log:
     2024-02-23: - Use multithreading to speed up searching and
                   copying process.
                 - Adjusted code structure.
+    2024-02-27: - Corrected spelling errors.
 
 '''
 
@@ -155,8 +156,8 @@ if __name__ == '__main__':
         'dataset': 'path/of/dataset', # Contains imgs and xmls
         'imgs': 'JPEGImages',  # Folder of images
         'xmls': 'Annotations',  # Folder of labels
-        'labels': ['dnb_blank'],  # Labels hope to find
-        'num': 15,  # Number of images hope to find (-1 for all)
+        'labels': ['dnb_blank'],  # Labels hoping to find
+        'num': 15,  # Number of images hoping to find (-1 for all)
         'thresh': 20,  # Print results if "num" is less than this
         'copy': False,  # Whether to copy found images to other directory
         'save_dir': 'path/to/save/copied/files'
