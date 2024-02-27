@@ -16,6 +16,7 @@ Update Log:
                   contained multiple periods.
     2024-02-21: - Fixed a parsing error that occurred on Windows platform.
     2024-02-23: - Changed the type of colorset.
+    2024-02-27: - Revised some comments.
 
 '''
 
@@ -353,7 +354,7 @@ if __name__ == '__main__':
         'save_xml': True,  # Whether to save detection results to XML files
         'visualize': True,  # Whether to visualize detection results
         'show_label': True,  # Whether to show labels of bboxes while visualization
-        'include': None,  # Label ids to include, like [1, 2, 7, 8, 9]
+        'include': [1, 2, 7, 8, 9],  # Label ids to include, None for all labels.
         'exclude': None  # Label ids to exclude
     }
 
