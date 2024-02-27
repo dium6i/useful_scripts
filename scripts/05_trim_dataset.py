@@ -2,34 +2,54 @@
 Author: Wei Qin
 Date: 2023-12-22
 Description:
-    Delete images(labels) without corresponding labels(images). 
-    Only for VOC dataset. 
+    Delete images(labels) without corresponding labels(images).
+    Only for VOC dataset.
 Update Log:
-    2023-12-22: File created.
+    2023-12-22: - File created.
+    2024-02-27: - Optimized code structure for easier integration into other projects.
 
 '''
 
 import os
 
 
-data = 'path/of/dataset'
+def run(params):
+    xmls = os.path.join(params['data'], params['xmls'])
+    imgs = os.path.join(params['data'], params['imgs'])
+    xmls_del = os.listdir(xmls)
+    imgs_del = os.listdir(imgs)
 
-xmls = os.path.join(data, 'Annotations')
-imgs = os.path.join(data, 'JPEGImages')
-xmls_del = os.listdir(xmls)
-imgs_del = os.listdir(imgs)
+    for img in imgs_del[:]:
+        snippet = img.split('.')
+        base = '.'.join(snippet[:-1])
 
-for img in imgs_del[:]:
-    snippet = img.split('.')
-    base = '.'.join(snippet[:-1])
+        xml = base + '.xml'
+        if xml in xmls_del:
+            xmls_del.remove(xml)
+            imgs_del.remove(img)
 
-    xml = base + '.xml'
-    if xml in xmls_del:
-        xmls_del.remove(xml)
-        imgs_del.remove(img)
+    print(f'{len(xmls_del)} label(s) can be deleted: ')
+    print(xmls_del)
+    print(f'{len(imgs_del)} image(s) can be deleted: ')
+    print(imgs_del)
 
-for i in xmls_del:
-    os.remove(os.path.join(xmls, i))
-for i in imgs_del:
-    os.remove(os.path.join(imgs, i))
-print(f'{len(xmls_del)} label(s)\n{len(imgs_del)} image(s)\nhave been deleted.')
+    if params['delete']:
+        for i in xmls_del:
+            os.remove(os.path.join(xmls, i))
+        for i in imgs_del:
+            os.remove(os.path.join(imgs, i))
+
+        print(f'{len(xmls_del)} label(s)\n{len(imgs_del)} image(s)\nhave been deleted.')
+
+
+if __name__ == '__main__':
+    # Setting parameters
+    params = {
+        'data': r'D:\01_hzwq\15_jlx_dnb\02_dnb\temp',
+        'imgs': 'JPEGImages',
+        'xmls': 'Annotations',
+        'show_info': True,
+        'delete': True
+    }
+
+    run(params)
