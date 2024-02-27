@@ -6,7 +6,8 @@ Description:
     Only for VOC dataset.
 Update Log:
     2023-12-22: - File created.
-    2024-02-27: - Optimized code structure for easier integration into other projects.
+    2024-02-27: - Optimized code structure for easier integration
+                  into other projects.
 
 '''
 
