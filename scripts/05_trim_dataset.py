@@ -14,6 +14,15 @@ import os
 
 
 def run(params):
+    '''
+    Main process.
+
+    Args:
+        params (dict): Parameters.
+
+    Returns:
+        None.
+    '''
     xmls = os.path.join(params['data'], params['xmls'])
     imgs = os.path.join(params['data'], params['imgs'])
     xmls_del = os.listdir(xmls)
@@ -45,11 +54,11 @@ def run(params):
 if __name__ == '__main__':
     # Setting parameters
     params = {
-        'data': r'D:\01_hzwq\15_jlx_dnb\02_dnb\temp',
-        'imgs': 'JPEGImages',
-        'xmls': 'Annotations',
-        'show_info': True,
-        'delete': True
+        'data': r'D:\01_hzwq\15_jlx_dnb\02_dnb\temp',  # Dataset directory
+        'imgs': 'JPEGImages',  # Image folder
+        'xmls': 'Annotations',  # Label folder
+        'show_info': True,  # Whether to show which files can be deleted
+        'delete': True  # Whether to delete files
     }
 
     run(params)
