@@ -22,7 +22,8 @@ Update Log:
     2024-01-20: - Adjusted the color scheme and transitioned the criterion
                   for determining small labels from pixel-based measurements
                   to percentage of image area.
-    2024-02-23: - Changed the type of colorset and code structure.
+    2024-02-27: - Optimized code structure for easier integration 
+                  into other projects.
 
 '''
 
@@ -180,44 +181,62 @@ def build_results_dir(params):
         params (dict): Parameters.
 
     Returns:
-        save_dir (str): Directory to save results.
-        ratios_dir (str): Directory of ratio results.
-        small_dir (str): Directory of small-objects results.
+        params (dict): Parameters.
     '''
     data_dir = os.path.dirname(params['xmls'])
     ratios_dir = small_dir = None
 
     t = time.strftime('%Y%m%d_%H%M%S')
+    # Directory to save results.
     save_dir = os.path.join(data_dir, 'Statistical_Results', t)
     os.makedirs(save_dir, exist_ok=True)
 
     if params['size_ratio']:
+        # Directory of ratio results.
         ratios_dir = os.path.join(save_dir, 'label_size_ratios')
         os.makedirs(ratios_dir, exist_ok=True)
 
     if params['small_object']:
+        # Directory of small-objects results.
         small_dir = os.path.join(save_dir, 'small_object_counts')
         os.makedirs(small_dir, exist_ok=True)
 
-    return save_dir, ratios_dir, small_dir
+    params['save_dir'] = save_dir
+    params['ratios_dir'] = ratios_dir
+    params['small_dir'] = small_dir
+
+    return params
 
 
-def plot_label_counts(lc, colorset, save_dir):
+def plot_label_counts(lc, params):
     '''
     Plot result of label counts.
 
     Args:
         lc (dict): Final label counts.
-        colorset (list): Colors used to plot.
-        save_dir (str): Directory to save results.
+        params (dict): Parameters.
 
     Returns:
-        None.
+        params (dict): Parameters.
     '''
-    print('Plotting label counts...')
+    # Colors used to plot
+    colorset = [
+        (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
+        (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
+        (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
+        ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
+        (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
+        (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
+        (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
+        (217, 134, 177), (133, 111, 102), 
+    ]
+    colorset = [(r/255, g/255, b/255) for r, g, b in colorset]
+    params['colorset'] = colorset
+
     keys = list(lc.keys())
     values = list(lc.values())
 
+    print('Plotting label counts...')
     bars = plt.bar(
         keys, 
         values, 
@@ -230,20 +249,22 @@ def plot_label_counts(lc, colorset, save_dir):
     plt.xticks(rotation=90)
     plt.ylabel('Counts')
     plt.savefig(
-        os.path.join(save_dir, 'label_counts.jpg'),
+        os.path.join(params['save_dir'], 'label_counts.jpg'),
         bbox_inches='tight',
         pad_inches=0.1,
         dpi=200)
     plt.close()
 
+    return params
 
-def plot_label_ratios(lr, ratios_dir):
+
+def plot_label_ratios(lr, params):
     '''
     Plot result of label ratios.
 
     Args:
         lr (dict): Final label size ratios.
-        ratios_dir (str): Directory of ratio results.
+        params (dict): Parameters.
 
     Returns:
         None.
@@ -264,22 +285,21 @@ def plot_label_ratios(lr, ratios_dir):
             plt.ylabel('Counts')
             plt.legend()
             plt.savefig(
-                os.path.join(ratios_dir, f'{label}_{key}_Ratios.jpg'),
+                os.path.join(params['ratios_dir'], f'{label}_{key}_Ratios.jpg'),
                 bbox_inches='tight',
                 pad_inches=0.1,
                 dpi=200)
             plt.close()
 
 
-def plot_small_counts(sc, colorset, small_dir):
+def plot_small_counts(sc, params):
     '''
     Plot a stacked bar chart of small-object counts by label and
     save detailed info as txt.
 
     Args:
         sc (dict): Final result of small-object counts.
-        colorset (list): Colors used to plot.
-        small_dir (str): Directory of small-objects results.
+        params (dict): Parameters.
 
     Returns:
         None.
@@ -292,7 +312,7 @@ def plot_small_counts(sc, colorset, small_dir):
         for item in size:
             unique_labels.add(item[1])
 
-    label_to_color = {label: colorset[i % len(colorset)] 
+    label_to_color = {label: params['colorset'][i % len(params['colorset'])] 
                       for i, label in enumerate(unique_labels)}
 
     # Prepare data for each size range
@@ -340,31 +360,39 @@ def plot_small_counts(sc, colorset, small_dir):
         bbox_to_anchor=(1.05, 1), 
         loc='upper left')
     plt.tight_layout()
-    plt.savefig(os.path.join(small_dir, 'small_object_counts_by_label.jpg'))
+    plt.savefig(os.path.join(params['small_dir'], 'small_object_counts_by_label.jpg'))
     plt.close()
 
     # Save detailed info
     for x in params['split_range']:
-        filename = os.path.join(small_dir, f'smaller_than_{x}%x{x}%.txt')
+        filename = os.path.join(params['small_dir'], f'smaller_than_{x}%x{x}%.txt')
         with open(filename, 'w') as f:
             for i in sc[f'{x}x{x}']:
                 f.write(' '.join(map(str, i)) + '\n')
 
 
-if __name__ == '__main__':
-    # Colors used to plot
-    colorset = [
-        (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
-        (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
-        (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
-        ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
-        (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
-        (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
-        (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
-        (217, 134, 177), (133, 111, 102), 
-    ]
-    colorset = [(r/255, g/255, b/255) for r, g, b in colorset]
+def run(params):
+    '''
+    Main process.
 
+    Args:
+        params (dict): Parameters.
+
+    Returns:
+        None.
+    '''
+    lc, lr, sc = count(params)
+    params = build_results_dir(params)
+    params = plot_label_counts(lc, params)
+    if params['size_ratio']:
+        plot_label_ratios(lr, params)
+    if params['small_object']:
+        plot_small_counts(sc, params)
+    print('Counting completed.')
+    print(f'Counting result(s) saved at {params["save_dir"]}.')
+
+
+if __name__ == '__main__':
     # Setting parameters
     params = {
         'xmls': 'path/of/xml/files',  # Directory of annotations.
@@ -373,12 +401,4 @@ if __name__ == '__main__':
         'split_range': [1, 2, 3, 4, 5]  # Count label smaller than 1% × 1%, etc.
     }
 
-    # Main process
-    lc, lr, sc = count(params)
-    save_dir, ratios_dir, small_dir = build_results_dir(params)
-    plot_label_counts(lc, colorset, save_dir)
-    if params['size_ratio']:
-        plot_label_ratios(lr, ratios_dir)
-    if params['small_object']:
-        plot_small_counts(sc, colorset, small_dir)
-    print(f'Counting completed.\nCounting result(s) saved at {save_dir}.')
+    run(params)
