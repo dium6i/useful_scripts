@@ -8,6 +8,7 @@ Update Log:
                 - Optimized the use of multiprocessing and the effect 
                   of visualization.
                 - Fixed a bug where unlabeled images were not saved.
+    2024-02-27: - Added some description.
 
 '''
 
@@ -174,12 +175,12 @@ def run(params):
 if __name__ == '__main__':
     # Setting parameters
     params = {
-        'labels': ['cat', 'dog', 'car'],
-        'font_dir': 'path/of/font.ttf',
-        'data_dir': 'path/of/dataset',
-        'imgs': 'JPEGImages',
-        'xmls': 'Annotations',
-        'save': 'Visualization'
+        'labels': ['cat', 'dog', 'car'],  # Labels in this dataset
+        'font_dir': 'path/of/font.ttf',  # Path of font used in visualization
+        'data_dir': 'path/of/dataset',  # Dataset directory
+        'imgs': 'JPEGImages',  # Image folder
+        'xmls': 'Annotations',  # Annotation folder
+        'save': 'Visualization'  # Result folder
     }
 
     run(params)
