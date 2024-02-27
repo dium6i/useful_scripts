@@ -5,14 +5,14 @@ Description:
     Visualize VOC annotations to check whether wrong labeling exists.
 Update Log:
     2024-02-23: - File created.
-                - Optimized the use of multiprocessing and the effect 
+                - Optimized the use of multi-threading and the effect
                   of visualization.
                 - Fixed a bug where unlabeled images were not saved.
-    2024-02-27: - Added some description.
+    2024-02-27: - Added new features and optimized code structure.
 
 '''
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 
 from PIL import Image, ImageDraw, ImageFont
@@ -39,14 +39,16 @@ def reprocess_params(params):
     return params
 
 
-def read_xml(xml_path):
+def read_xml(xml, xml_path):
     '''
-    Read XML file to extract annotations.
+    Single XML file parsing process.
 
     Args:
+        xml (str): XML file name.
         xml_path (str): Path of XML file.
 
     Returns:
+        xml (str): XML file name.
         results (list): Result of labelings.
     '''
     results = []
@@ -61,27 +63,69 @@ def read_xml(xml_path):
             'xmin', 'ymin', 'xmax', 'ymax'])
         results.append([label, xmin, ymin, xmax, ymax])
 
-    return results
+    return xml, results
 
 
-def draw_bbox(params, image):
+def read_xmls(xmls):
+    '''
+    Read all XML files to extract annotations.
+
+    Args:
+        xmls (str): Path of XML directory.
+
+    Returns:
+        annotations (dict): Results of all annotations.
+    '''
+    annotations = {}
+    with ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(read_xml, xml, os.path.join(xmls, xml))
+            for xml in os.listdir(xmls)
+        ]
+        for future in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc='Parsing XML files'):
+            k, v = future.result()
+            annotations[k] = v
+
+    return annotations
+
+
+def get_labels(annotations):
+    '''
+    Get labels from annotations.
+
+    Args:
+        annotations (dict): Results of all annotations.
+
+    Returns:
+        labels (list): Labels in dataset.
+    '''
+    labels = []
+    for k, v in annotations.items():
+        labels.extend([i[0] for i in v])
+
+    return sorted(set(labels))
+
+
+def draw_bbox(params, image, annotations, include=None, exclude=None):
     '''
     Draw bbox and label on image and save it.
 
     Args:
         params (dict): Parameters.
         image (str): Image filename.
-        results (list): Annotations of this image.
+        annotations (dict): Results of all annotations.
+        include (list): Labels to include.
+        exclude (list): Labels to exclude.
 
     Returns:
         None.
     '''
-    # Get annotations
     snippet = image.split('.')
     base = '.'.join(snippet[:-1])  # Avoid filename like abc.def.jpg
     xml = base + '.xml'
-    xml_path = os.path.join(params['xmls'], xml)
-    results = read_xml(xml_path)
 
     colors = [
         (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
@@ -104,44 +148,53 @@ def draw_bbox(params, image):
     w, h = im.size
     lw = int(max(w, h) * 0.003) + 1
 
+    results = annotations[xml]
     for i in results:
         label, xmin, ymin, xmax, ymax = i
-        color = colors[params['labels'].index(label)]
+
+        if include and label not in include:
+            continue
+        elif exclude and label in exclude:
+            continue
+
+        color_id = params['labels'].index(label)
+        color = colors[label_id % len(colors)]
 
         draw.rectangle([(xmin, ymin), (xmax, ymax)],
                        outline=color, width=lw)
 
-        # Draw label
-        if min(w, h) < 600:
-            th = 12
-        else:
-            th = int(max(w, h) * 0.015)
+        if params['show_label']:
+            # Draw label
+            if min(w, h) < 600:
+                th = 12
+            else:
+                th = int(max(w, h) * 0.015)
 
-        font = ImageFont.truetype(params['font_dir'], th)
-        tw = draw.textlength(label, font=font)
+            font = ImageFont.truetype(params['font_dir'], th)
+            tw = draw.textlength(label, font=font)
 
-        x1 = xmin
-        y1 = ymin - th - lw
-        x2 = xmin + tw + lw
-        y2 = ymin
+            x1 = xmin
+            y1 = ymin - th - lw
+            x2 = xmin + tw + lw
+            y2 = ymin
 
-        if y1 < 10:  # Label-top out of image
-            y1 = ymin
-            y2 = ymin + th + lw
+            if y1 < 10:  # Label-top out of image
+                y1 = ymin
+                y2 = ymin + th + lw
 
-        if x2 > w:  # Label-right out of image
-            x1 = w - tw - lw
-            x2 = w
+            if x2 > w:  # Label-right out of image
+                x1 = w - tw - lw
+                x2 = w
 
-        draw.rectangle(
-            [(x1, y1), (x2 + lw, y2)], 
-            fill=color, 
-            width=lw)
-        draw.text(
-            (x1 + lw, y1 + lw), 
-            label, 
-            font=font, 
-            fill=(255, 255, 255))
+            draw.rectangle(
+                [(x1, y1), (x2 + lw, y2)],
+                fill=color,
+                width=lw)
+            draw.text(
+                (x1 + lw, y1 + lw),
+                label,
+                font=font,
+                fill=(255, 255, 255))
 
     im.save(os.path.join(params['save'], image), quality=95)
 
@@ -158,29 +211,37 @@ def run(params):
     '''
     params = reprocess_params(params)
 
-    # Process each image in parallel
-    with ProcessPoolExecutor() as executor:
+    annotations = read_xmls(params['xmls'])
+    params['labels'] = get_labels(annotations)
+
+    with ThreadPoolExecutor() as executor:
         images = os.listdir(params['imgs'])
         futures = [
-            executor.submit(draw_bbox, params, image) for image in images
-        ]
-
-        for future in tqdm(
+            executor.submit(
+                draw_bbox,
+                params,
+                image,
+                annotations,
+                include=params['include'],
+                exclude=params['exclude']) for image in images]
+        for _ in tqdm(
                 as_completed(futures),
                 total=len(futures),
                 desc='Drawing'):
-            future.result()
+            pass
 
 
 if __name__ == '__main__':
     # Setting parameters
     params = {
-        'labels': ['cat', 'dog', 'car'],  # Labels in this dataset
-        'font_dir': 'path/of/font.ttf',  # Path of font used in visualization
         'data_dir': 'path/of/dataset',  # Dataset directory
         'imgs': 'JPEGImages',  # Image folder
         'xmls': 'Annotations',  # Annotation folder
-        'save': 'Visualization'  # Result folder
+        'save': 'Visualization',  # Result folder
+        'font_dir': 'path/of/font',  # Font path
+        'include': None,  # Labels hoping to visualize, None for all labels. Prior than exclude.
+        'exclude': None,  # Labels not hoping to visualize
+        'show_label': True,  # Whether to show labels of bboxes while visualization
     }
 
     run(params)
