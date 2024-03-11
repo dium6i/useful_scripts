@@ -17,6 +17,7 @@ Update Log:
     2024-02-21: - Fixed a parsing error that occurred on Windows platform.
     2024-02-23: - Changed the type of colorset.
     2024-02-27: - Revised some comments.
+    2024-03-11: - Removed the XML declaration when generating XML file.
 
 '''
 
@@ -251,6 +252,9 @@ def generate_XML(data, file_name, img_shape):
     xmlstr = minidom.parseString(
         ET.tostring(annotation)).toprettyxml(
         indent='    ')
+
+    # Remove the XML declaration
+    xmlstr = '\n'.join(xmlstr.split('\n')[1:])
 
     return xmlstr
 
