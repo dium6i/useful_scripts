@@ -22,8 +22,10 @@ Update Log:
     2024-01-20: - Adjusted the color scheme and transitioned the criterion
                   for determining small labels from pixel-based measurements
                   to percentage of image area.
-    2024-02-27: - Optimized code structure for easier integration 
+    2024-02-27: - Optimized code structure for easier integration
                   into other projects.
+    2024-03-11: - Added functionality to display total count and individual
+                  counts for each label.
 
 '''
 
@@ -235,6 +237,8 @@ def plot_label_counts(lc, params):
 
     keys = list(lc.keys())
     values = list(lc.values())
+    print(f'Dataset has {sum(values)} label(s) in total.')
+    print(lc)
 
     print('Plotting label counts...')
     bars = plt.bar(
