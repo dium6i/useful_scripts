@@ -204,10 +204,10 @@ def postprocess(
 
 
 def model_predict(
-        session, 
-        img, 
-        model_input_size=(640, 640), 
-        labels=None, 
+        session,
+        img,
+        model_input_size=(640, 640),
+        labels=None,
         with_label=False):
     """
     Main process to predict an image.
