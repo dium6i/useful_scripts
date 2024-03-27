@@ -5,9 +5,13 @@ Description:
     Use the onnx model with the onnxruntime library for model inference.
 Update Log:
     2024-03-26: - File created.
+    2024-03-27: - Added functions: 
+                    -- Whether to contain label name in the results.
+                    -- Set inference threads.
 
 """
 
+import ast
 import os
 
 import cv2
@@ -97,18 +101,19 @@ def calculate_iou(box1, box2):
     return iou
 
 
-def load_model(model_path):
+def load_model(model_path, thread_num=1):
     """
     Model initialization.
 
     Args:
     - model_path: Model path.
+    - thread_num: Number of threads to use.
 
     Returns:
     - session: Onnx inference session.
     """
     session_options = ort.SessionOptions()
-    # session_options.intra_op_num_threads = num
+    session_options.intra_op_num_threads = thread_num
     # session_options.use_gpu = True
     session = ort.InferenceSession(model_path, session_options)
 
@@ -121,6 +126,7 @@ def preprocess(img, input_shape=(640, 640)):
 
     Args:
     - img: Read by OpenCV.
+    - input_shape: Model input shape.
 
     Returns:
     - image_data: Preprocessed image data.
@@ -134,55 +140,75 @@ def preprocess(img, input_shape=(640, 640)):
     return image_data
 
 
-def postprocess(outputs, img_shape, input_shape=(640, 640), conf=0.5, iou=0.6):
+def postprocess(
+        outs,
+        img_shape,
+        input_shape=(640, 640),
+        labels=None,
+        conf=0.5,
+        iou=0.6):
     """
     Postprocess inference results.
 
     Args:
-    - img: Read by OpenCV.
+    - outs: Raw inference results.
     - img_shape: Image shape in the format (h, w, c).
     - input_shape: Model input shape.
+    - labels: Model labels.
     - conf: Confidence threshold to filter results.
-    - iou: Intersection Over Union (IoU) threshold for Non-Maximum Suppression (NMS).
+    - iou: Intersection Over Union (IoU) threshold for Non-Maximum 
+           Suppression (NMS).
 
     Returns:
-    - results: Filtered results in the format [[class_id, score, xmin, ymin, xmax, ymax], ......].
+    - results: Filtered results in the format 
+               [[class_id, score, xmin, ymin, xmax, ymax], ......] or
+               [[class_id, class_name, score, xmin, ymin, xmax, ymax], ......].
     """
-    outputs = np.transpose(np.squeeze(outputs))  # shape: (8400, 4 + labels)
+    outs = np.transpose(np.squeeze(outs))  # shape: (8400, 4 + labels number)
     boxes, scores, class_ids = [], [], []
     x_factor = img_shape[1] / input_shape[1]
     y_factor = img_shape[0] / input_shape[0]
 
-    max_scores = np.max(outputs[:, 4:], axis=1)
-    class_ids = np.argmax(outputs[:, 4:], axis=1)
+    max_scores = np.max(outs[:, 4:], axis=1)
+    class_ids = np.argmax(outs[:, 4:], axis=1)
     valid_indices = np.where(max_scores >= conf)
-    outputs = np.hstack((
-        outputs[:, :4][valid_indices],
+    outs = np.hstack((
+        outs[:, :4][valid_indices],
         class_ids[valid_indices].reshape(-1, 1), 
         max_scores[valid_indices].reshape(-1, 1), 
         ))  # In the format [[x, y, w, h, class_id, score], ......]
 
-    x, y, w, h = outputs[:, 0].copy(), outputs[:, 1].copy(), outputs[:, 2].copy(), outputs[:, 3].copy()
-    outputs[:, 0] = (x - w / 2) * x_factor
-    outputs[:, 1] = (y - h / 2) * y_factor
-    outputs[:, 2] = (x + w / 2) * x_factor
-    outputs[:, 3] = (y + h / 2) * y_factor
-    outputs[:, :4] = outputs[:, :4].astype(int)
+    x, y, w, h = outs[:, 0].copy(), outs[:, 1].copy(), outs[:, 2].copy(), outs[:, 3].copy()
+    outs[:, 0] = (x - w / 2) * x_factor
+    outs[:, 1] = (y - h / 2) * y_factor
+    outs[:, 2] = (x + w / 2) * x_factor
+    outs[:, 3] = (y + h / 2) * y_factor
+    outs[:, :4] = outs[:, :4].astype(int)
 
-    boxes = outputs[:, :4]
-    scores = outputs[:, -1]
-    class_ids = outputs[:, -2]
+    boxes = outs[:, :4]
+    scores = outs[:, -1]
+    class_ids = outs[:, -2]
     indices = non_max_suppression(boxes, scores, iou)
 
-    results = [
-        [int(class_ids[i]), float(scores[i]), *[int(j) for j in boxes[i]]] 
-        for i in indices
-        ]
+    if labels:
+        results = [[int(class_ids[i]), 
+                    labels[int(class_ids[i])], 
+                    float(scores[i]), 
+                    *[int(j) for j in boxes[i]]] for i in indices]
+    else:
+        results = [[int(class_ids[i]), 
+                    float(scores[i]), 
+                    *[int(j) for j in boxes[i]]] for i in indices]
 
     return results
 
 
-def model_predict(session, img, model_input_size=(640, 640)):
+def model_predict(
+        session, 
+        img, 
+        model_input_size=(640, 640), 
+        labels=None, 
+        with_label=False):
     """
     Main process to predict an image.
 
@@ -190,14 +216,20 @@ def model_predict(session, img, model_input_size=(640, 640)):
     - session: Onnx inference session.
     - img: Read by OpenCV.
     - model_input_size: Model input size in the format (640, 640).
+    - labels: Model labels.
+    - with_label: Whether to contain label name in the results.
 
     Returns:
     - results: Final results in the format [[class_id, score, xmin, ymin, xmax, ymax], ......].
     """
-    image_data = preprocess(img, model_input_size)
     model_input_name = session.get_inputs()[0].name
+    if with_label:
+        labels_str = session.get_modelmeta().custom_metadata_map['names']
+        labels = ast.literal_eval(labels_str)
+
+    image_data = preprocess(img, model_input_size)
     outputs = session.run(None, {model_input_name: image_data})
-    results = postprocess(outputs, img.shape, model_input_size)
+    results = postprocess(outputs, img.shape, model_input_size, labels)
 
     return results
 
@@ -205,13 +237,13 @@ def model_predict(session, img, model_input_size=(640, 640)):
 if __name__ == '__main__':
     image_dir = "path/of/image/directory"  # Image file or directory
     model_path = "path/of/model"  # Path of model
-    model = load_model(model_path)
+    model = load_model(model_path, thread_num=4)
 
     if os.path.isfile(image_dir):
         img = cv2.imread(image_dir)
-        results = model_predict(model, img, model_input_size=(640, 640))
+        results = model_predict(model, img, with_label=True)
         print(results)
     else:
-        for image in tqdm(os.listdir(image_dir), desc='Processing'):
+        for image in tqdm(os.listdir(image_dir)[:1], desc='Processing'):
             img = cv2.imread(os.path.join(image_dir, image))
-            results = model_predict(model, img, model_input_size=(640, 640))
+            results = model_predict(model, img, with_label=True)
