@@ -26,6 +26,8 @@ Update Log:
                   into other projects.
     2024-03-11: - Added functionality to display total count and individual
                   counts for each label.
+    2024-04-07: - Added feature that automatically adjust the picture width
+                - of label count based on the number of labels.
 
 '''
 
@@ -241,6 +243,11 @@ def plot_label_counts(lc, params):
     print(lc)
 
     print('Plotting label counts...')
+    
+    # Calculate figure size based on number of keys
+    fig_width = max(len(keys) * 0.4, 6)  # Adjust multiplier as needed
+    plt.figure(figsize=(fig_width, 6))
+
     bars = plt.bar(
         keys, 
         values, 
@@ -252,6 +259,7 @@ def plot_label_counts(lc, params):
     plt.title('Label Counts')
     plt.xticks(rotation=90)
     plt.ylabel('Counts')
+    plt.xlim(-0.8, len(keys))  # Delete unneeded white space
     plt.savefig(
         os.path.join(params['save_dir'], 'label_counts.jpg'),
         bbox_inches='tight',
