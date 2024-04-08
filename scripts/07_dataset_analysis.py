@@ -28,6 +28,7 @@ Update Log:
                   counts for each label.
     2024-04-07: - Added feature that automatically adjust the picture width
                 - of label count based on the number of labels.
+    2024-04-08: - Added new output content.
 
 '''
 
@@ -239,7 +240,7 @@ def plot_label_counts(lc, params):
 
     keys = list(lc.keys())
     values = list(lc.values())
-    print(f'Dataset has {sum(values)} label(s) in total.')
+    print(f'Dataset has {len(keys)} classes and {sum(values)} labels in total.')
     print(lc)
 
     print('Plotting label counts...')
