@@ -262,7 +262,8 @@ def plot_label_counts(lc, params):
     print(f'Dataset has {len(keys)} classes and {sum(values)} labels in total.')
     print(lc)
 
-    print('Plotting label counts...')
+    if isinstance(params['xmls'], str):
+        print('Plotting label counts...')
     
     # Calculate figure size based on number of keys
     fig_width = max(len(keys) * 0.4, 6)  # Adjust multiplier as needed
@@ -426,7 +427,8 @@ def run(params):
     if params['small_object']:
         plot_small_counts(sc, params)
     print('Counting completed.')
-    print(f'Counting result(s) saved at {params["save_dir"]}.')
+    if isinstance(params['xmls'], str):
+        print(f'Counting result(s) saved at {params["save_dir"]}.')
 
 
 if __name__ == '__main__':
