@@ -29,6 +29,8 @@ Update Log:
     2024-04-07: - Added feature that automatically adjust the picture width
                 - of label count based on the number of labels.
     2024-04-08: - Added new output content.
+    2024-04-18: - Optimized code structure for easier integration
+                  into other projects.
 
 '''
 
@@ -160,11 +162,18 @@ def count(params):
     lr = {}
     sc = {f'{x}x{x}': [] for x in params['split_range']}
 
+    if isinstance(params['xmls'], str):  # Directory of annotations
+        xmls = os.listdir(params['xmls'])
+    elif isinstance(params['xmls'], list):  # List of annotation file
+        xmls = params['xmls']
+    else:
+        print("Unsupported input.(params['xmls'])")
+        exit()
+
     # Process each XML file in parallel
     with ThreadPoolExecutor() as executor:
         futures = [
-            executor.submit(process_xml, params, xml)
-            for xml in os.listdir(params['xmls'])
+            executor.submit(process_xml, params, xml) for xml in xmls
         ]
         for future in tqdm(
                 as_completed(futures),
