@@ -28,7 +28,6 @@ Update Log:
                   counts for each label.
     2024-04-07: - Added feature that automatically adjust the picture width
                 - of label count based on the number of labels.
-    2024-04-08: - Added new output content.
     2024-04-18: - Optimized code structure for easier integration
                   into other projects.
 
@@ -51,7 +50,7 @@ def process_xml(params, xml):
 
     Args:
         params (dict): Parameters.
-        xml (string): XML file name.
+        xml (string): File name or absolute path of XML file.
 
     Returns:
         lc (dict): Label counts.
@@ -68,7 +67,15 @@ def process_xml(params, xml):
     lr = defaultdict(lambda: {'Height': [], 'Width': []})
     sc = {f'{x}x{x}': [] for x in params['split_range']}
 
-    xml_path = os.path.join(params['xmls'], xml)
+    if isinstance(params['xmls'], str):  # Directory of annotations
+        xml_path = os.path.join(params['xmls'], xml)
+    elif isinstance(params['xmls'], list):  # List of annotation file
+        xml_path = xml
+    else:
+        print("Unsupported input.(params['xmls'])")
+        exit()
+
+    # xml_path = os.path.join(params['xmls'], xml)
 
     # Ignore hidden directory
     if os.path.isdir(xml_path):
@@ -104,7 +111,7 @@ def process_xml(params, xml):
                 for i in sorted(params['split_range']):
                     if h_ratio < i / 100 and w_ratio < i / 100:
                         details = (  # (image1.xml, cat, w: 0.2153, h: 0.2507)
-                            xml, 
+                            os.path.basename(xml), 
                             name, 
                             f'h:{h_ratio:.4f}', 
                             f'w:{w_ratio:.4f}')
@@ -197,6 +204,9 @@ def build_results_dir(params):
     Returns:
         params (dict): Parameters.
     '''
+    if isinstance(params['xmls'], list):
+        return params
+
     data_dir = os.path.dirname(params['xmls'])
     ratios_dir = small_dir = None
 
@@ -270,11 +280,12 @@ def plot_label_counts(lc, params):
     plt.xticks(rotation=90)
     plt.ylabel('Counts')
     plt.xlim(-0.8, len(keys))  # Delete unneeded white space
-    plt.savefig(
-        os.path.join(params['save_dir'], 'label_counts.jpg'),
-        bbox_inches='tight',
-        pad_inches=0.1,
-        dpi=200)
+    if isinstance(params['xmls'], str):
+        plt.savefig(
+            os.path.join(params['save_dir'], 'label_counts.jpg'),
+            bbox_inches='tight',
+            pad_inches=0.1,
+            dpi=200)
     plt.close()
 
     return params
@@ -306,11 +317,12 @@ def plot_label_ratios(lr, params):
             plt.xlabel('Ratio')
             plt.ylabel('Counts')
             plt.legend()
-            plt.savefig(
-                os.path.join(params['ratios_dir'], f'{label}_{key}_Ratios.jpg'),
-                bbox_inches='tight',
-                pad_inches=0.1,
-                dpi=200)
+            if isinstance(params['xmls'], str):
+                plt.savefig(
+                    os.path.join(params['ratios_dir'], f'{label}_{key}_Ratios.jpg'),
+                    bbox_inches='tight',
+                    pad_inches=0.1,
+                    dpi=200)
             plt.close()
 
 
@@ -382,7 +394,10 @@ def plot_small_counts(sc, params):
         bbox_to_anchor=(1.05, 1), 
         loc='upper left')
     plt.tight_layout()
-    plt.savefig(os.path.join(params['small_dir'], 'small_object_counts_by_label.jpg'))
+    if isinstance(params['xmls'], str):
+        plt.savefig(os.path.join(
+            params['small_dir'], 
+            'small_object_counts_by_label.jpg'))
     plt.close()
 
     # Save detailed info
@@ -417,7 +432,7 @@ def run(params):
 if __name__ == '__main__':
     # Setting parameters
     params = {
-        'xmls': 'path/of/xml/files',  # Directory of annotations.
+        'xmls': 'path/of/xml/files',  # Directory of annotations or list of absolute paths of annotations.
         'size_ratio': True,  # Weather to count size ratio per class.
         'small_object': True,  # Weather to count small objects.
         'split_range': [1, 2, 3, 4, 5]  # Count label smaller than 1% × 1%, etc.
