@@ -155,8 +155,8 @@ def model_predict(
 
 
 if __name__ == '__main__':
-    image_dir = "path/of/image/directory"  # Image file or directory
-    model_path = "path/of/model"  # Path of model
+    image_dir = 'path/of/image/directory'  # Image file or directory
+    model_path = 'path/of/model'  # Path of model
     model = load_model(model_path, thread_num=4)
 
     if os.path.isfile(image_dir):
