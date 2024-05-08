@@ -27,7 +27,6 @@ def pad_image(img, target_width):
     Returns:
         padded (numpy.ndarray): The padded image as a NumPy array.
     """
-
     # Check if image is valid and width needs padding
     if img is None or img.shape[1] >= target_width:
         return img
