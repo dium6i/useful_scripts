@@ -5,11 +5,13 @@ Description:
     Use the onnx model with the onnxruntime library for model inference.
 Update Log:
     2024-03-26: - File created.
-    2024-03-27: - Added functions: 
-                    -- Whether to contain label name in the results.
-                    -- Set inference threads.
+    2024-03-27: - Added the option to include category names in the results and
+                  set inference threads when using CPU.
     2024-03-29: - Use cv2.dnn.NMSBoxes() to replace the customized NMS method.
     2024-04-30: - Keep the method of doing NMS in xyxy.
+    2024-05-10: - Removed the option to include category names in the results.
+                - Adapted inference for YOLOv8 classification model.
+                - Modified image preprocessing to proportional scaling and padding.
 
 """
 
@@ -22,15 +24,17 @@ import onnxruntime as ort
 from tqdm import tqdm
 
 
-def non_max_suppression(boxes, scores, iou_threshold):
+def non_max_suppression(boxes, scores, iou_thresh):
     """
     Perform Non-Maximum Suppression to filter out overlapping bounding boxes.
+
     Args:
-    - boxes: List of bounding boxes in the format [x_min, y_min, x_max, y_max].
-    - scores: List of confidence scores corresponding to each bounding box.
-    - iou_threshold: Threshold for Intersection over Union.
+        boxes (list): Bounding boxes in the format [[x1, y1, x2, y2], ...].
+        scores (list): Confidence scores corresponding to each bounding box.
+        iou_thresh (float): Threshold for Intersection over Union.
+
     Returns:
-    - keep_indices: List of indices to keep after NMS.
+        keep_indices (list): Indices to keep after NMS.
     """
     if len(boxes) == 0:
         return []
@@ -38,7 +42,7 @@ def non_max_suppression(boxes, scores, iou_threshold):
     # Sort boxes by their scores in descending order
     sorted_indices = sorted(
         range(len(scores)), key=lambda i: scores[i], reverse=True
-        )
+    )
 
     keep_indices = []
     while len(sorted_indices) > 0:
@@ -50,15 +54,15 @@ def non_max_suppression(boxes, scores, iou_threshold):
         selected_box = boxes[max_index]
         other_boxes = [boxes[i] for i in sorted_indices[1:]]
         iou_scores = [
-            calculate_iou(selected_box, other_box) 
+            calculate_iou(selected_box, other_box)
             for other_box in other_boxes
-            ]
+        ]
 
         # Filter out boxes with IoU greater than threshold
         filtered_indices = [
-            i for i, iou in zip(sorted_indices[1:], iou_scores) 
-            if iou <= iou_threshold
-            ]
+            i for i, iou in zip(sorted_indices[1:], iou_scores)
+            if iou <= iou_thresh
+        ]
         sorted_indices = filtered_indices
 
     return keep_indices
@@ -67,11 +71,13 @@ def non_max_suppression(boxes, scores, iou_threshold):
 def calculate_iou(box1, box2):
     """
     Calculate the Intersection over Union (IoU) of two bounding boxes.
+
     Args:
-    - box1: Bounding box in the format [x_min, y_min, x_max, y_max].
-    - box2: Bounding box in the format [x_min, y_min, x_max, y_max].
+        box1 (list): Bounding box in the format [x1, y1, x2, y2].
+        box2 (list): Bounding box in the format [x1, y1, x2, y2].
+
     Returns:
-    - iou: Intersection over Union (IoU) score.
+        iou: Intersection over Union (IoU) score.
     """
     x1, y1, x2, y2 = box1
     x3, y3, x4, y4 = box2
@@ -84,7 +90,7 @@ def calculate_iou(box1, box2):
 
     # Calculate intersection area
     intersection_area = max(0, intersection_x2 - intersection_x1 + 1) * \
-                        max(0, intersection_y2 - intersection_y1 + 1)
+        max(0, intersection_y2 - intersection_y1 + 1)
 
     # Calculate areas of each bounding box
     box1_area = (x2 - x1 + 1) * (y2 - y1 + 1)
@@ -99,143 +105,153 @@ def calculate_iou(box1, box2):
     return iou
 
 
-def load_model(model_path, thread_num=1):
+def load_model(model_path, thread_num=1, use_gpu=False):
     """
     Model initialization.
 
     Args:
-    - model_path: Model path.
-    - thread_num: Number of threads to use.
+        model_path (str): Model path.
+        thread_num (int): Number of threads to use.
+        use_gpu (Bool): Whether to use GPU.
 
     Returns:
-    - session: Onnx inference session.
+        session: Onnx inference session.
     """
     session_options = ort.SessionOptions()
     session_options.intra_op_num_threads = thread_num
-    # session_options.use_gpu = True
+    if use_gpu:
+        session_options.use_gpu = True
     session = ort.InferenceSession(model_path, session_options)
 
     return session
 
 
-def preprocess(img, input_shape=(640, 640)):
+def preprocess(img, imgsz):
     """
-    Preprocess image.
+    Resize image and pad it with gray pixels for model inference.
 
     Args:
-    - img: Read by OpenCV.
-    - input_shape: Model input shape.
+        img (numpy.ndarray): Image array.
+        imgsz (int): Model input size. Like 640, 416, etc.
 
     Returns:
-    - image_data: Preprocessed image data.
+        img (numpy.ndarray): Preprocessed image data.
+        tuple: Scale info used to restore bbox.
     """
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = cv2.resize(img, input_shape)
-    image_data = np.array(img) / 255.0
-    image_data = np.transpose(image_data, (2, 0, 1))  # Channel first
-    image_data = np.expand_dims(image_data, axis=0).astype(np.float32)
+    img = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2RGB)
+    h, w, _ = img.shape
+    ratio = min(imgsz / h, imgsz / w)
 
-    return image_data
+    new_h, new_w = int(h * ratio), int(w * ratio)
+    img = cv2.resize(img, (new_w, new_h))
+
+    dh = imgsz - new_h  # Total added pixels in height.
+    dw = imgsz - new_w  # Total added pixels in width.
+    t, b = dh // 2, dh - (dh // 2)  # Added pixels in top and bottom.
+    l, r = dw // 2, dw - (dw // 2)  # Added pixels in left and right.
+
+    color = [127, 127, 127]
+    img = cv2.copyMakeBorder(img, t, b, l, r, cv2.BORDER_CONSTANT, value=color)
+
+    img = np.array(img) / 255.0
+    img = np.transpose(img, (2, 0, 1))  # Channel first
+    img = np.expand_dims(img, axis=0).astype(np.float32)
+
+    return img, (ratio, t, l)
 
 
-def postprocess(
-        outs,
-        img_shape,
-        input_shape=(640, 640),
-        labels=None,
-        conf=0.5,
-        iou=0.6):
+def postprocess(outs, labels, task, scale, conf=0.5, iou=0.6):
     """
     Postprocess inference results.
 
     Args:
-    - outs: Raw inference results.
-    - img_shape: Image shape in the format (h, w, c).
-    - input_shape: Model input shape.
-    - labels: Model labels.
-    - conf: Confidence threshold to filter results.
-    - iou: Intersection Over Union (IoU) threshold for Non-Maximum 
-           Suppression (NMS).
+        outs (list): Raw inference results.
+        conf (float): Confidence threshold to filter results.
+        iou (float): Intersection Over Union (IoU) threshold for Non-Maximum
+                     Suppression (NMS).
 
     Returns:
-    - results: Filtered results in the format 
-               [[class_id, score, xmin, ymin, w, h], ......] or
-               [[class_id, class_name, score, xmin, ymin, w, h], ......].
+        results (list): Filtered results in the format of
+                        [[id, name, score, xmin, ymin, w, h], ...].
     """
-    outs = np.transpose(np.squeeze(outs))  # shape: (8400, 4 + labels number)
-    boxes, scores, class_ids = [], [], []
-    x_factor = img_shape[1] / input_shape[1]
-    y_factor = img_shape[0] / input_shape[0]
+    if task == 'classify':
+        class_id = np.argmax(outs[0][0])
+        class_name = labels[class_id]
+        score = outs[0][0][class_id]
 
-    max_scores = np.max(outs[:, 4:], axis=1)
-    class_ids = np.argmax(outs[:, 4:], axis=1)
-    valid_indices = np.where(max_scores >= conf)
-    outs = np.hstack((
-        outs[:, :4][valid_indices],
-        class_ids[valid_indices].reshape(-1, 1), 
-        max_scores[valid_indices].reshape(-1, 1), 
-        ))  # In the format [[x, y, w, h, class_id, score], ......]
+        return [class_id, class_name, score]
 
-    x, y, w, h = outs[:, 0].copy(), outs[:, 1].copy(), outs[:, 2].copy(), outs[:, 3].copy()
-    outs[:, 0] = (x - w / 2) * x_factor
-    outs[:, 1] = (y - h / 2) * y_factor
-    outs[:, 2] = w * x_factor
-    outs[:, 3] = h * y_factor
+    elif task == 'detect':
+        outs = np.transpose(np.squeeze(outs))  # shape: (8400, 4 + Number of categories)
+        boxes, scores, class_ids = [], [], []
 
-    # Use xyxy to NMS
-    # outs[:, 2] = (x + w / 2) * x_factor
-    # outs[:, 3] = (y + h / 2) * y_factor
+        max_scores = np.max(outs[:, 4:], axis=1)
+        class_ids = np.argmax(outs[:, 4:], axis=1)
+        valid_indices = np.where(max_scores >= conf)
+        outs = np.hstack((
+            outs[:, :4][valid_indices],
+            class_ids[valid_indices].reshape(-1, 1),
+            max_scores[valid_indices].reshape(-1, 1),
+        ))  # [[xmin, ymin, w, h, class_id, score], ...]
 
-    outs[:, :4] = outs[:, :4].astype(int)
+        # Restore bboxes to original size
+        s, t, l = scale
+        x, y = outs[:, 0].copy(), outs[:, 1].copy()
+        w, h = outs[:, 2].copy(), outs[:, 3].copy()
+        outs[:, 0] = ((x - w / 2) - l) / s
+        outs[:, 1] = ((y - h / 2) - t) / s
+        outs[:, 2] = w / s
+        outs[:, 3] = h / s
 
-    boxes = outs[:, :4]
-    scores = outs[:, -1]
-    class_ids = outs[:, -2]
+        # Use xyxy to NMS
+        # outs[:, 2] = ((x + w / 2) - l) / s
+        # outs[:, 3] = ((y + h / 2) - t) / s
 
-    # Use xyxy to NMS
-    # indices = non_max_suppression(boxes, scores, iou)
-    indices = cv2.dnn.NMSBoxes(boxes, scores, conf, iou)
+        outs[:, :4] = outs[:, :4].astype(int)
 
-    if labels:
-        results = [[int(class_ids[i]), 
-                    labels[int(class_ids[i])], 
-                    float(scores[i]), 
+        boxes = outs[:, :4]
+        scores = outs[:, -1]
+        class_ids = outs[:, -2]
+
+        # Use xyxy to NMS
+        # indices = non_max_suppression(boxes, scores, iou)
+        # Use xywh to NMS
+        indices = cv2.dnn.NMSBoxes(boxes, scores, conf, iou)
+
+        results = [[int(class_ids[i]),
+                    labels[int(class_ids[i])],
+                    round(float(scores[i]), 4),
                     *[int(j) for j in boxes[i]]] for i in indices]
+
+        return results
+
     else:
-        results = [[int(class_ids[i]), 
-                    float(scores[i]), 
-                    *[int(j) for j in boxes[i]]] for i in indices]
+        print('Unsupported task.')
 
-    return results
+        return None
 
 
-def model_predict(
-        session,
-        img,
-        model_input_size=(640, 640),
-        labels=None,
-        with_label=False):
+def model_predict(session, img):
     """
     Main process to predict an image.
 
     Args:
-    - session: Onnx inference session.
-    - img: Read by OpenCV.
-    - model_input_size: Model input size in the format (640, 640).
-    - labels: Model labels.
-    - with_label: Whether to contain label name in the results.
+        session: Onnx inference session.
+        img (numpy.ndarray): Image array.
 
     Returns:
-    - results: Final results in the format [[class_id, score, xmin, ymin, xmax, ymax], ......].
+        results (list): Final results in the format of
+                        [[id, name, score, xmin, ymin, w, h], ...].
     """
-    model_input_name = session.get_inputs()[0].name
-    if with_label:
-        labels_str = session.get_modelmeta().custom_metadata_map['names']
-        labels = ast.literal_eval(labels_str)
+    model_info = session.get_modelmeta().custom_metadata_map
+    labels = ast.literal_eval(model_info['names'])  # {0: 'cat', 1: 'dog', ...}
+    imgsz = ast.literal_eval(model_info['imgsz'])  # [640, 640], [416, 416]
+    task = model_info['task']  # detect, classify
 
-    image_data = preprocess(img, model_input_size)
-    outputs = session.run(None, {model_input_name: image_data})
-    results = postprocess(outputs, img.shape, model_input_size, labels)
+    image_data, scale = preprocess(img, imgsz[0])
+    input_name = session.get_inputs()[0].name
+    outputs = session.run(None, {input_name: image_data})
+    results = postprocess(outputs, labels, task, scale)
 
     return results
 
@@ -247,9 +263,10 @@ if __name__ == '__main__':
 
     if os.path.isfile(image_dir):
         img = cv2.imread(image_dir)
-        results = model_predict(model, img, with_label=True)
+        results = model_predict(model, img)
         print(results)
+
     else:
         for image in tqdm(os.listdir(image_dir)[:1], desc='Processing'):
             img = cv2.imread(os.path.join(image_dir, image))
-            results = model_predict(model, img, with_label=True)
+            results = model_predict(model, img)
