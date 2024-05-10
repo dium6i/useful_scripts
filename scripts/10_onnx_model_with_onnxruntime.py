@@ -12,6 +12,7 @@ Update Log:
     2024-05-10: - Removed the option to include category names in the results.
                 - Adapted inference for YOLOv8 classification model.
                 - Modified image preprocessing to proportional scaling and padding.
+                - Fixed issue with GPU inference failures.
 
 """
 
@@ -105,23 +106,28 @@ def calculate_iou(box1, box2):
     return iou
 
 
-def load_model(model_path, thread_num=1, use_gpu=False):
+def load_model(model_path, thread_num=1):
     """
     Model initialization.
 
     Args:
         model_path (str): Model path.
         thread_num (int): Number of threads to use.
-        use_gpu (Bool): Whether to use GPU.
 
     Returns:
         session: Onnx inference session.
     """
+    providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
     session_options = ort.SessionOptions()
     session_options.intra_op_num_threads = thread_num
-    if use_gpu:
-        session_options.use_gpu = True
-    session = ort.InferenceSession(model_path, session_options)
+
+    try:
+        session = ort.InferenceSession(
+            model_path, session_options, providers=providers)
+    except Exception as e:
+        print(f"GPU inference failed: {e}. Falling back to CPU.")
+        session = ort.InferenceSession(
+            model_path, session_options, providers=['CPUExecutionProvider'])
 
     return session
 
