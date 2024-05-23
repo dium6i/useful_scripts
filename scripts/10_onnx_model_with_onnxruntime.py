@@ -13,6 +13,7 @@ Update Log:
                 - Adapted inference for YOLOv8 classification model.
                 - Modified image preprocessing to proportional scaling and padding.
                 - Fixed issue with GPU inference failures.
+    2024-05-23: - Use all CPUs for model inference by default.
 
 """
 
@@ -106,7 +107,7 @@ def calculate_iou(box1, box2):
     return iou
 
 
-def load_model(model_path, thread_num=1):
+def load_model(model_path, thread_num=-1):
     """
     Model initialization.
 
@@ -117,6 +118,9 @@ def load_model(model_path, thread_num=1):
     Returns:
         session: Onnx inference session.
     """
+    if thread_num == -1:  # Use all cpus
+        thread_num = os.cpu_count()
+
     providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
     session_options = ort.SessionOptions()
     session_options.intra_op_num_threads = thread_num
@@ -265,7 +269,7 @@ def model_predict(session, img):
 if __name__ == '__main__':
     image_dir = 'path/of/image/directory'  # Image file or directory
     model_path = 'path/of/model'  # Path of model
-    model = load_model(model_path, thread_num=4)
+    model = load_model(model_path)
 
     if os.path.isfile(image_dir):
         img = cv2.imread(image_dir)
@@ -273,6 +277,6 @@ if __name__ == '__main__':
         print(results)
 
     else:
-        for image in tqdm(os.listdir(image_dir)[:1], desc='Processing'):
+        for image in tqdm(os.listdir(image_dir), desc='Processing'):
             img = cv2.imread(os.path.join(image_dir, image))
             results = model_predict(model, img)
