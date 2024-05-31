@@ -18,6 +18,8 @@ Update Log:
     2024-02-23: - Changed the type of colorset.
     2024-02-27: - Revised some comments.
     2024-03-11: - Removed the XML declaration when generating XML file.
+    2024-05-31: - Added a new feature to specify thresholds for certain
+                  categories.
 
 '''
 
@@ -70,17 +72,24 @@ def filter_res(params, results, include=None, exclude=None):
     labels = params['labels']
 
     # Single threshold for all labels
-    if type(params['confs']) == float:
+    if isinstance(params['confs'], float):
         confs = [params['confs']] * len(labels)
 
     # Multi thresholds for each label
-    elif type(params['confs']) == list:
+    elif isinstance(params['confs'], list):
         if len(params['confs']) == len(labels):
             confs = params['confs']
         else:
             confs = [params['confs'][0]] * len(labels)
             print('\nWarnning: \nThe number of thresholds provided in params does not match the number of labels. First threshold would be used for all labels.')
 
+    # Specify thresholds for certain categories
+    elif isinstance(params['confs'], dict):
+        confs = [0.5] * len(labels)
+        for k, v in params['confs'].items():
+            idx = labels.index(k)
+            confs[idx] = v
+    
     # Invalid types
     else:
         confs = [0.5] * len(labels)
@@ -354,7 +363,7 @@ if __name__ == '__main__':
         'img_dir': 'path/of/image/directory',  # Image file or directory
         'save_dir': 'path/of/saving/directory',  # Result saved directory
         'font_dir': '/work/consolab.ttf',  # Visualize font directory
-        'confs': 0.5, # Threshold for filtering results, 'float' for all labels, 'list' for each.
+        'confs': 0.5,  # Threshold for filtering results, 'float' for all labels, 'list' for each, dict for certain categories.
         'save_xml': True,  # Whether to save detection results to XML files
         'visualize': True,  # Whether to visualize detection results
         'show_label': True,  # Whether to show labels of bboxes while visualization
