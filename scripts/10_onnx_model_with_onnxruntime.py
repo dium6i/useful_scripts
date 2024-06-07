@@ -192,48 +192,79 @@ def postprocess(outs, labels, task, scale, conf=0.5, iou=0.6):
         return [class_id, class_name, score]
 
     elif task == 'detect':
-        outs = np.transpose(np.squeeze(outs))  # shape: (8400, 4 + Number of categories)
-        boxes, scores, class_ids = [], [], []
+        outs = np.squeeze(outs)
+        if outs.shape[-1] != 6:  # v8, shape: (4 + Number of categories, ...)
+            outs = np.transpose(outs)
+            boxes, scores, class_ids = [], [], []
 
-        max_scores = np.max(outs[:, 4:], axis=1)
-        class_ids = np.argmax(outs[:, 4:], axis=1)
-        valid_indices = np.where(max_scores >= conf)
-        outs = np.hstack((
-            outs[:, :4][valid_indices],
-            class_ids[valid_indices].reshape(-1, 1),
-            max_scores[valid_indices].reshape(-1, 1),
-        ))  # [[xmin, ymin, w, h, class_id, score], ...]
+            max_scores = np.max(outs[:, 4:], axis=1)
+            class_ids = np.argmax(outs[:, 4:], axis=1)
+            valid_indices = np.where(max_scores >= conf)
+            outs = np.hstack((
+                outs[:, :4][valid_indices],
+                max_scores[valid_indices].reshape(-1, 1),
+                class_ids[valid_indices].reshape(-1, 1),
+            ))  # [[x, y, w, h, score, class_id], ...]
 
-        # Restore bboxes to original size
-        s, t, l = scale
-        x, y = outs[:, 0].copy(), outs[:, 1].copy()
-        w, h = outs[:, 2].copy(), outs[:, 3].copy()
-        outs[:, 0] = ((x - w / 2) - l) / s
-        outs[:, 1] = ((y - h / 2) - t) / s
-        outs[:, 2] = w / s
-        outs[:, 3] = h / s
+            # Restore bboxes to original size
+            x, y = outs[:, 0].copy(), outs[:, 1].copy()
+            w, h = outs[:, 2].copy(), outs[:, 3].copy()
+            s, t, l = scale
+            outs[:, 0] = ((x - w / 2) - l) / s
+            outs[:, 1] = ((y - h / 2) - t) / s
+            outs[:, 2] = w / s
+            outs[:, 3] = h / s
 
-        # Use xyxy to NMS
-        # outs[:, 2] = ((x + w / 2) - l) / s
-        # outs[:, 3] = ((y + h / 2) - t) / s
+            # Use xyxy to NMS
+            # outs[:, 2] = ((x + w / 2) - l) / s
+            # outs[:, 3] = ((y + h / 2) - t) / s
 
-        outs[:, :4] = outs[:, :4].astype(int)
+            outs[:, :4] = outs[:, :4].astype(int)
 
-        boxes = outs[:, :4]
-        scores = outs[:, -1]
-        class_ids = outs[:, -2]
+            boxes = outs[:, :4]
+            scores = outs[:, -2]
+            class_ids = outs[:, -1]
 
-        # Use xyxy to NMS
-        # indices = non_max_suppression(boxes, scores, iou)
-        # Use xywh to NMS
-        indices = cv2.dnn.NMSBoxes(boxes, scores, conf, iou)
+            # Use xyxy to NMS
+            # indices = non_max_suppression(boxes, scores, iou)
+            # Use xywh to NMS
+            indices = cv2.dnn.NMSBoxes(boxes, scores, conf, iou)
 
-        results = [[int(class_ids[i]),
-                    labels[int(class_ids[i])],
-                    round(float(scores[i]), 4),
-                    *[int(j) for j in boxes[i]]] for i in indices]
+            results = [[int(class_ids[i]),
+                        labels[int(class_ids[i])],
+                        round(float(scores[i]), 4),
+                        *[int(j) for j in boxes[i]]] for i in indices]
 
-        return results
+            return results
+
+        else:  # v10, shape: (300, 6)
+            scores = outs[:, 4]
+            indices = np.where(scores > conf)[0]
+            outs = outs[indices, :]
+
+            # From xyxy to xywh
+            x1, y1 = outs[:, 0].copy(), outs[:, 1].copy()
+            x2, y2 = outs[:, 2].copy(), outs[:, 3].copy()
+            w, h = x2 - x1, y2 - y1
+            x, y = x1 + w / 2, y1 + h / 2
+
+            # Restore bboxes to original size
+            s, t, l = scale
+            outs[:, 0] = ((x - w / 2) - l) / s
+            outs[:, 1] = ((y - h / 2) - t) / s
+            outs[:, 2] = w / s
+            outs[:, 3] = h / s
+
+            boxes = outs[:, :4]
+            scores = outs[:, -2]
+            class_ids = outs[:, -1]
+
+            results = [[int(class_ids[i]),
+                        labels[int(class_ids[i])],
+                        round(float(scores[i]), 4),
+                        *[int(j) for j in boxes[i]]] for i in range(len(outs))]
+
+            return results
 
     else:
         print('Unsupported task.')
