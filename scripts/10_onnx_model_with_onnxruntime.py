@@ -14,6 +14,7 @@ Update Log:
                 - Modified image preprocessing to proportional scaling and padding.
                 - Fixed issue with GPU inference failures.
     2024-05-23: - Use all CPUs for model inference by default.
+    2024-06-07: - Added support for YOLOv10.
 
 """
 
