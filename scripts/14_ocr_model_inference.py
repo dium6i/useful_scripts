@@ -6,6 +6,7 @@ Description:
     The current version is only suitable for model inference using FastDeploy.
 Update Log:
     2024-06-03: - File created.
+    2024-06-07: - Optimized code structure.
 
 """
 
@@ -55,19 +56,32 @@ def ocr_model(img, model_path):
     return results
 
 
-def draw_bbox(img, bbox, color, alpha=0.5):
+def draw_bbox(img, idx, bbox, alpha=0.5):
     """
     Draw a bounding box with a transparent fill on an image.
 
     Args:
         img (numpy.ndarray): Array of original image.
+        idx (int): Index of bbox.
         bbox (list): List of four corner points of the bounding box [(x1, y1), (x2, y2), (x3, y3), (x4, y4)].
-        color (tuple): The color of the bounding box and fill in (B, G, R).
         alpha (float): The transparency factor of the fill. (0 is fully transparent)
 
     Returns:
         output (numpy.ndarray): Array of image with bbox drawn.
     """
+    colorset = [ # RGB
+        (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
+        (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
+        (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
+        ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
+        (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
+        (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
+        (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
+        (217, 134, 177), (133, 111, 102), 
+    ]
+    color = colorset[idx % len(colorset)]
+    color = color[::-1]  # BGR to RGB
+
     overlay = img.copy()
     output = img.copy()
 
@@ -83,7 +97,7 @@ def draw_bbox(img, bbox, color, alpha=0.5):
     # Draw the outline of the bounding box
     cv2.polylines(output, [points], isClosed=True, color=color, thickness=1)
 
-    return output
+    return output, color
 
 
 if __name__ == '__main__':
@@ -104,27 +118,18 @@ if __name__ == '__main__':
     h, w, _ = img.shape
     result_im = Image.new('RGB', (w, h), (255, 255, 255))
     draw = ImageDraw.Draw(result_im)
-    font = ImageFont.truetype('path/of/font', size=40)
-
-    colorset = [ # RGB
-        (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
-        (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
-        (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
-        ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
-        (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
-        (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
-        (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
-        (217, 134, 177), (133, 111, 102), 
-    ]
+    font = ImageFont.truetype('path/of/font', size=0.0115 * h)
 
     # Visualize OCR results
     for i, res in enumerate(ocr_results):
-        color = colorset[i % len(colorset)]
-        color = color[::-1]  # BGR to RGB
         bbox, text, score = res
-        img = draw_bbox(img, bbox, color, alpha=0.5)
+        img, color = draw_bbox(img, i, bbox)
         draw.text(bbox[-1], text, fill=color, font=font)
 
     result_img = np.array(result_im)
     vis_img = cv2.hconcat([img, result_img])
-    cv2.imwrite('path/of/visualized/image', vis_img)
+
+    # Save Visualization result
+    dirname = os.path.dirname(img_path)
+    base, ext = os.path.splitext(os.path.basename(img_path))
+    cv2.imwrite(os.path.join(dirname, base + '_vis.jpg'), vis_img)
