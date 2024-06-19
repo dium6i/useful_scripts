@@ -1,14 +1,17 @@
-'''
+"""
 Author: Wei Qin
 Date: 2023-12-15
 Description:
-    Crop images(VOC dataset) according to annotations
-    to check whether the label is wrong.
+    Crop images(VOC dataset) according to annotations to check whether the
+    label is wrong.
 Update Log:
-    2023-12-15: File created.
-    2024-01-07: Use multi-threading to speed up.
+    2023-12-15: - File created.
+    2024-01-07: - Added usage of multi-threading to speed up.
+    2024-06-19: - Added error handling for image reading and XML parsing.
+                - Fixed an issue where using multi-threading can lead to
+                  inaccurate number of cropped images.
 
-'''
+"""
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
@@ -20,7 +23,7 @@ from tqdm import tqdm
 
 
 def process_image(params, img):
-    '''
+    """
     Single image cropping process.
 
     Args:
@@ -29,18 +32,26 @@ def process_image(params, img):
 
     Returns:
         None.
-    '''
-    snippet = img.split('.')
-    base = '.'.join(snippet[:-1])
-    ext = snippet[-1]
+    """
+    base, ext = os.path.splitext(img)
+    ext = '.jpg' if ext == '.jfif' else ext
 
     img_path = os.path.join(params['imgs_dir'], img)
     xml_path = os.path.join(params['xmls_dir'], base + '.xml')
 
     im = cv2.imread(img_path)
+    if im is None:
+        print(f"Error reading image {img_path}")
+        return
+
     i = 1  # Starting index of cropped images.
 
-    tree = ET.parse(xml_path)
+    try:
+        tree = ET.parse(xml_path)
+    except ET.ParseError:
+        print(f"Error parsing XML {xml_path}")
+        return
+
     root = tree.getroot()
 
     for obj in root.iter('object'):
@@ -50,8 +61,8 @@ def process_image(params, img):
             continue
 
         obj_dir = os.path.join(params['save_dir'], label)
-        if not os.path.exists(obj_dir):
-            os.makedirs(obj_dir)
+        # Use exist_ok=True to ensure thread-safe directory creation.
+        os.makedirs(obj_dir, exist_ok=True)
 
         bndbox = obj.find('bndbox')
         box = [
@@ -62,12 +73,12 @@ def process_image(params, img):
         ]
         croped = im[box[1]:box[3], box[0]:box[2]]
 
-        cv2.imwrite(os.path.join(obj_dir, f'{base}_{i}.{ext}'), croped)
+        cv2.imwrite(os.path.join(obj_dir, f'{base}_{i}{ext}'), croped)
         i += 1
 
 
 def run(params):
-    '''
+    """
     Main process.
 
     Args:
@@ -75,7 +86,7 @@ def run(params):
 
     Returns:
         None.
-    '''
+    """
     t = time.strftime('%Y%m%d_%H%M%S')
     params['imgs_dir'] = os.path.join(params['data'], params['imgs'])
     params['xmls_dir'] = os.path.join(params['data'], params['xmls'])
