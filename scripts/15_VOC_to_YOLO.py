@@ -5,6 +5,7 @@ Description:
     Convert VOC labels to YOLO format.
 Update Log:
     2024-06-12: - File created.
+    2024-06-21: - Deleted the function of reading label files.
 
 """
 
@@ -12,26 +13,6 @@ import os
 import xml.etree.ElementTree as ET
 
 import yaml
-
-
-def read_labels(label_path):
-    if isinstance(label_path, list):
-        return label_path
-
-    if label_path.endswith('.txt'):
-        with open(label_path, 'r') as f:
-            labels = f.readlines()
-            labels = [label.rstrip('\n') for label in labels]
-        return labels
-
-    elif label_path.endswith('.yml') or label_path.endswith('.yaml'):
-        with open(label_path, 'r') as f:
-            labels = yaml.safe_load(f)['label_list']
-        return labels
-
-    else:
-        return None
-        print('Unsupported input type.')
 
 
 def xyxy2xywh(size, box):
@@ -45,23 +26,15 @@ def xyxy2xywh(size, box):
     return (x, y, w, h)
 
 
-def voc2yolo(data_path, labels):
-    if not labels:  # No valid labels
-        exit()
-
-    # Create a folder(labels) to store the .txt files
-    label_save = os.path.join(os.path.dirname(data_path), 'labels')
-    if not os.path.exists(label_save):
-        os.mkdir(label_save)
-
-    xmls = os.listdir(data_path)
+def voc2yolo(labels, xmls_dir, save_dir):
+    xmls = os.listdir(xmls_dir)
     print(f'{len(xmls)} XML files to be converted.\nConverting... ')
 
     for xml in xmls:
-        xml_path = os.path.join(data_path, xml)
-        txt_path = os.path.join(label_save, xml.replace('.xml', '.txt'))
-        with open(txt_path, 'w', encoding='utf-8') as f:
+        xml_path = os.path.join(xmls_dir, xml)
+        txt_path = os.path.join(save_dir, os.path.splitext(xml)[0] + '.txt')
 
+        with open(txt_path, 'w', encoding='utf-8') as f:
             # Parsing XML files
             tree = ET.parse(xml_path)
             root = tree.getroot()
@@ -83,7 +56,9 @@ def voc2yolo(data_path, labels):
 
 
 if __name__ == '__main__':
-    data_path = '/path/to/xmls/folder'
-    label_path = ['cat', 'dog', 'person']  # labels list or path of labels file (txt or yml/yaml)
     labels = read_labels(label_path)
-    voc2yolo(data_path, labels)
+    xmls_dir = '/path/to/xmls/folder'
+    save_dir = '/path/to/save/txt/files'
+    os.makedirs(save_dir, exist_ok=True)
+
+    voc2yolo(labels, xmls_dir, save_dir)
