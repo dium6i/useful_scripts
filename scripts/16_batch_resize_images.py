@@ -52,8 +52,8 @@ if __name__ == '__main__':
 
     with ThreadPoolExecutor() as executor:
         futures = [
-            executor.submit(resize_image, imgs, save, short_side, img)
-            for img in os.listdir(imgs)
+            executor.submit(resize_image, imgs, save, short_side, i)
+            for i in os.listdir(imgs) if os.path.isfile(os.path.join(imgs, i))
         ]
         for future in tqdm(
                 as_completed(futures),
