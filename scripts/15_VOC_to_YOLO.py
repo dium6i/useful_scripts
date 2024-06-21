@@ -56,7 +56,7 @@ def voc2yolo(labels, xmls_dir, save_dir):
 
 
 if __name__ == '__main__':
-    labels = read_labels(label_path)
+    labels = ['cat', 'dog', 'person']
     xmls_dir = '/path/to/xmls/folder'
     save_dir = '/path/to/save/txt/files'
     os.makedirs(save_dir, exist_ok=True)
