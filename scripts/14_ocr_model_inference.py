@@ -7,10 +7,12 @@ Description:
 Update Log:
     2024-06-03: - File created.
     2024-06-07: - Optimized code structure.
+    2024-06-26: - Optimized code structure.
 
 """
 
 import os
+import time
 
 import cv2
 import fastdeploy as fd
@@ -51,7 +53,9 @@ def ocr_model(img, model_path):
         cls_model=None,
         rec_model=rec_model)
 
+    t1 = time.time()
     results = ocr_model.predict(img)
+    print(f'Prediction time: {(time.time() - t1) * 1000:.2f} ms')
 
     return results
 
@@ -100,36 +104,55 @@ def draw_bbox(img, idx, bbox, alpha=0.5):
     return output, color
 
 
+def visualize_results(im, ocr_results, font_path, img_path):
+    """
+    Visualize the OCR results.
+
+    Args:
+        im (numpy.ndarray): Array of original image.
+        ocr_results (list): OCR results.
+        font_path (str): Path of the font used for visualization.
+        img_path (str): Path of the source image.
+
+    Returns:
+        None.
+    """
+    h, w, _ = im.shape
+    result_im = Image.new('RGB', (w, h), (255, 255, 255))
+    draw = ImageDraw.Draw(result_im)
+
+    # Visualize OCR results
+    for i, res in enumerate(ocr_results):
+        bbox, wh, text, score = res
+        im, color = draw_bbox(im, i, bbox)
+        font = ImageFont.truetype(font_path, size=wh[1])
+        draw.text(bbox[-1], text, fill=color, font=font)
+
+    result_img = np.array(result_im)
+    vis_img = cv2.hconcat([im, result_img])
+
+    # Save Visualization results
+    dirname = os.path.dirname(img_path)
+    base, ext = os.path.splitext(os.path.basename(img_path))
+    save_path = os.path.join(dirname, base + '_vis.jpg')
+    cv2.imwrite(save_path, vis_img)
+    print(f'Visualized image saved at: {save_path}')
+
+
 if __name__ == '__main__':
+    font_path = 'path/of/font'
     img_path = 'path/of/image'
-    img = cv2.imread(img_path)
+    im = cv2.imread(img_path)
 
     # Model inference
     model_path = 'path/of/models/directory'
-    results = ocr_model(img, model_path)
+    results = ocr_model(im, model_path)
 
     # Rearrange and filter results
     ocr_results = [[list(zip(results.boxes[i][0::2], results.boxes[i][1::2])),  # boxes
+                    (results.boxes[i][2] - results.boxes[i][0], results.boxes[i][5] - results.boxes[i][3]),  # boxes w and h
                     results.text[i],  # text
                     round(results.rec_scores[i], 4)]  # confidence
                    for i, _ in enumerate(results.boxes) if results.rec_scores[i] > 0.5]
 
-    # Create a white image for visualizing the OCR results
-    h, w, _ = img.shape
-    result_im = Image.new('RGB', (w, h), (255, 255, 255))
-    draw = ImageDraw.Draw(result_im)
-    font = ImageFont.truetype('path/of/font', size=0.0115 * h)
-
-    # Visualize OCR results
-    for i, res in enumerate(ocr_results):
-        bbox, text, score = res
-        img, color = draw_bbox(img, i, bbox)
-        draw.text(bbox[-1], text, fill=color, font=font)
-
-    result_img = np.array(result_im)
-    vis_img = cv2.hconcat([img, result_img])
-
-    # Save Visualization result
-    dirname = os.path.dirname(img_path)
-    base, ext = os.path.splitext(os.path.basename(img_path))
-    cv2.imwrite(os.path.join(dirname, base + '_vis.jpg'), vis_img)
+    visualize_results(im, ocr_results, font_path, img_path)
