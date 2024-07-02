@@ -10,7 +10,7 @@ Update Log:
     2024-03-29: - Use cv2.dnn.NMSBoxes() to replace the customized NMS method.
     2024-04-30: - Keep the method of doing NMS in xyxy.
     2024-05-10: - Removed the option to include category names in the results.
-                - Adapted inference for YOLOv8 classification model.
+                - Adapted inference for YOLOv8 classify model.
                 - Modified image preprocessing to proportional scaling and padding.
                 - Fixed issue with GPU inference failures.
     2024-06-07: - Added support for YOLOv10.
