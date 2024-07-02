@@ -13,8 +13,9 @@ Update Log:
                 - Adapted inference for YOLOv8 classification model.
                 - Modified image preprocessing to proportional scaling and padding.
                 - Fixed issue with GPU inference failures.
-    2024-05-23: - Use all CPUs for model inference by default.
     2024-06-07: - Added support for YOLOv10.
+    2024-07-02: - Adjusted code structure.
+                - Adapted inference for YOLOv8 pose model.
 
 """
 
@@ -24,291 +25,438 @@ import os
 import cv2
 import numpy as np
 import onnxruntime as ort
+from PIL import Image, ImageDraw, ImageFont
+import time
 from tqdm import tqdm
 
 
-def non_max_suppression(boxes, scores, iou_thresh):
+class YOLOv8:
     """
-    Perform Non-Maximum Suppression to filter out overlapping bounding boxes.
+    A class for inferring various YOLOv8 models such as classification, detection, and pose estimation.
 
-    Args:
-        boxes (list): Bounding boxes in the format [[x1, y1, x2, y2], ...].
-        scores (list): Confidence scores corresponding to each bounding box.
-        iou_thresh (float): Threshold for Intersection over Union.
+    This class handles the loading of the model, preprocessing of input images, postprocessing of model outputs,
+    and visualization of the results. It supports different types of YOLOv8 models, including classification,
+    object detection, and pose estimation.
 
-    Returns:
-        keep_indices (list): Indices to keep after NMS.
+    Attributes:
+        model_path (str): The path to the ONNX model file.
+        thread_num (int): The number of threads to use for inference. Default is -1 (use all available threads).
+        conf_thres (float): The confidence threshold for object detection. Default is 0.5.
+        iou_thres (float): The IoU threshold for non-max suppression. Default is 0.6.
+        session (onnxruntime.InferenceSession): The loaded ONNX model.
+        input_name (str): The name of the input node for the model.
+        visualize (bool): Whether to visualize the results. Default is False.
+        font_path (str): The path to the font file for visualization. Required if visualize is True.
     """
-    if len(boxes) == 0:
-        return []
 
-    # Sort boxes by their scores in descending order
-    sorted_indices = sorted(
-        range(len(scores)), key=lambda i: scores[i], reverse=True
-    )
+    def __init__(self, model_path, thread_num=-1, conf_thres=0.5, iou_thres=0.6):
+        """
+        Initialize the YOLOv8 class with the specified parameters.
 
-    keep_indices = []
-    while len(sorted_indices) > 0:
-        # Pick the box with the highest confidence score
-        max_index = sorted_indices[0]
-        keep_indices.append(max_index)
+        Args:
+            model_path (str): Path to the ONNX model file.
+            thread_num (int): Number of threads to use for inference. Default is -1.
+            conf_thres (float): Confidence threshold for object detection. Default is 0.5.
+            iou_thres (float): IoU threshold for non-max suppression. Default is 0.6.
+        """
+        self.thread_num = thread_num
+        self.conf_thres = conf_thres
+        self.iou_thres = iou_thres
+        
+        self.initialize_model(model_path)
 
-        # Compute IoU between the picked box and all other boxes
-        selected_box = boxes[max_index]
-        other_boxes = [boxes[i] for i in sorted_indices[1:]]
-        iou_scores = [
-            calculate_iou(selected_box, other_box)
-            for other_box in other_boxes
-        ]
+    def initialize_model(self, model_path):
+        """
+        Load and initialize the ONNX model.
 
-        # Filter out boxes with IoU greater than threshold
-        filtered_indices = [
-            i for i, iou in zip(sorted_indices[1:], iou_scores)
-            if iou <= iou_thresh
-        ]
-        sorted_indices = filtered_indices
+        Args:
+            model_path (str): Path to the ONNX model file.
+        """
+        if self.thread_num == -1:
+            self.thread_num = os.cpu_count()
 
-    return keep_indices
+        session_options = ort.SessionOptions()
+        session_options.intra_op_num_threads = self.thread_num
+        self.session = ort.InferenceSession(model_path, session_options)
+        self.input_name = self.session.get_inputs()[0].name
 
+        model_info = self.session.get_modelmeta().custom_metadata_map
+        self.labels = ast.literal_eval(model_info['names'])  # {0: 'cat', ...}
+        self.imgsz = ast.literal_eval(model_info['imgsz'])  # [640, 640]
+        self.task = model_info['task']  # detect, classify, pose
+        self.kpt_shape = (
+            ast.literal_eval(model_info['kpt_shape'])
+            if 'kpt_shape' in model_info
+            else None
+        )
 
-def calculate_iou(box1, box2):
-    """
-    Calculate the Intersection over Union (IoU) of two bounding boxes.
+    def preprocess(self, im):
+        """
+        Resize and pad the input image for model inference.
 
-    Args:
-        box1 (list): Bounding box in the format [x1, y1, x2, y2].
-        box2 (list): Bounding box in the format [x1, y1, x2, y2].
+        Args:
+            im (numpy.ndarray): Input image array.
 
-    Returns:
-        iou: Intersection over Union (IoU) score.
-    """
-    x1, y1, x2, y2 = box1
-    x3, y3, x4, y4 = box2
+        Returns:
+            im (numpy.ndarray): Preprocessed image data.
+        """
+        im = cv2.cvtColor(im.copy(), cv2.COLOR_BGR2RGB)
+        h, w, _ = im.shape
+        imgsz = self.imgsz[0]
+        ratio = min(imgsz / h, imgsz / w)
 
-    # Calculate the coordinates of the intersection rectangle
-    intersection_x1 = max(x1, x3)
-    intersection_y1 = max(y1, y3)
-    intersection_x2 = min(x2, x4)
-    intersection_y2 = min(y2, y4)
+        new_h, new_w = int(h * ratio), int(w * ratio)
+        im = cv2.resize(im, (new_w, new_h))
 
-    # Calculate intersection area
-    intersection_area = max(0, intersection_x2 - intersection_x1 + 1) * \
-        max(0, intersection_y2 - intersection_y1 + 1)
+        dh = imgsz - new_h  # Total added pixels in height.
+        dw = imgsz - new_w  # Total added pixels in width.
+        t, b = dh // 2, dh - (dh // 2)  # Added pixels in top and bottom.
+        l, r = dw // 2, dw - (dw // 2)  # Added pixels in left and right.
+        self.scale = (ratio, t, l)  # Scale info used to restore bbox.
 
-    # Calculate areas of each bounding box
-    box1_area = (x2 - x1 + 1) * (y2 - y1 + 1)
-    box2_area = (x4 - x3 + 1) * (y4 - y3 + 1)
+        color = [127, 127, 127]  # Pad with gray pixels
+        im = cv2.copyMakeBorder(im, t, b, l, r, cv2.BORDER_CONSTANT, value=color)
 
-    # Calculate Union area
-    union_area = box1_area + box2_area - intersection_area
+        im = np.array(im) / 255.0
+        im = np.transpose(im, (2, 0, 1))  # Channel first
+        im = np.expand_dims(im, axis=0).astype(np.float32)
 
-    # Calculate IoU
-    iou = intersection_area / union_area
+        return im
 
-    return iou
+    def postprocess(self, outs):
+        """
+        Postprocess the model inference results.
 
+        Args:
+            outs (list): Raw inference results from the model.
 
-def load_model(model_path, thread_num=-1):
-    """
-    Model initialization.
+        Returns:
+            results (list): Filtered and formatted results.
+                            [[id, name, score, [(xmin, ymin), (w, h)]], ...].
+        """
+        if self.task == 'classify':
+            class_id = np.argmax(outs[0][0])
+            class_name = self.labels[class_id]
+            score = outs[0][0][class_id]
 
-    Args:
-        model_path (str): Model path.
-        thread_num (int): Number of threads to use.
+            return [class_id, class_name, score]
 
-    Returns:
-        session: Onnx inference session.
-    """
-    if thread_num == -1:  # Use all cpus
-        thread_num = os.cpu_count()
+        elif self.task == 'detect':
+            outs = np.squeeze(outs)
+            if outs.shape[-1] != 6:  # v8
+                outs = np.transpose(outs)
 
-    providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
-    session_options = ort.SessionOptions()
-    session_options.intra_op_num_threads = thread_num
+                max_scores = np.max(outs[:, 4:], axis=1)
+                class_ids = np.argmax(outs[:, 4:], axis=1)
+                valid_indices = np.where(max_scores >= self.conf_thres)
+                outs = np.hstack((
+                    outs[:, :4][valid_indices],
+                    max_scores[valid_indices].reshape(-1, 1),
+                    class_ids[valid_indices].reshape(-1, 1),
+                ))  # [[x, y, w, h, score, class_id], ...]
 
-    try:
-        session = ort.InferenceSession(
-            model_path, session_options, providers=providers)
-    except Exception as e:
-        print(f"GPU inference failed: {e}. Falling back to CPU.")
-        session = ort.InferenceSession(
-            model_path, session_options, providers=['CPUExecutionProvider'])
+                # Restore bboxes to original size
+                x, y = outs[:, 0].copy(), outs[:, 1].copy()
+                w, h = outs[:, 2].copy(), outs[:, 3].copy()
+                s, t, l = self.scale
+                outs[:, 0] = ((x - w / 2) - l) / s
+                outs[:, 1] = ((y - h / 2) - t) / s
+                outs[:, 2] = w / s
+                outs[:, 3] = h / s
+                outs[:, :4] = outs[:, :4].astype(int)
 
-    return session
+                boxes = outs[:, :4]
+                scores = outs[:, -2]
+                class_ids = outs[:, -1]
+                indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf_thres, self.iou_thres)
 
+                results = []
+                for i in indices:
+                    class_id = int(class_ids[i])
+                    class_name = self.labels[int(class_ids[i])]
+                    score = round(float(scores[i]), 4)
+                    box = [(int(boxes[i][0]), int(boxes[i][1])), 
+                           (int(boxes[i][2]), int(boxes[i][3]))]
 
-def preprocess(img, imgsz):
-    """
-    Resize image and pad it with gray pixels for model inference.
+                    results.append([class_id, class_name, score, box])
 
-    Args:
-        img (numpy.ndarray): Image array.
-        imgsz (int): Model input size. Like 640, 416, etc.
+                return results
 
-    Returns:
-        img (numpy.ndarray): Preprocessed image data.
-        tuple: Scale info used to restore bbox.
-    """
-    img = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2RGB)
-    h, w, _ = img.shape
-    ratio = min(imgsz / h, imgsz / w)
+            else:  # v10, shape: (300, 6)
+                scores = outs[:, 4]
+                indices = np.where(scores > self.conf_thres)[0]
+                outs = outs[indices, :]
 
-    new_h, new_w = int(h * ratio), int(w * ratio)
-    img = cv2.resize(img, (new_w, new_h))
+                # From xyxy to xywh
+                x1, y1 = outs[:, 0].copy(), outs[:, 1].copy()
+                x2, y2 = outs[:, 2].copy(), outs[:, 3].copy()
+                w, h = x2 - x1, y2 - y1
+                x, y = x1 + w / 2, y1 + h / 2
 
-    dh = imgsz - new_h  # Total added pixels in height.
-    dw = imgsz - new_w  # Total added pixels in width.
-    t, b = dh // 2, dh - (dh // 2)  # Added pixels in top and bottom.
-    l, r = dw // 2, dw - (dw // 2)  # Added pixels in left and right.
+                # Restore bboxes to original size
+                s, t, l = self.scale
+                outs[:, 0] = ((x - w / 2) - l) / s
+                outs[:, 1] = ((y - h / 2) - t) / s
+                outs[:, 2] = w / s
+                outs[:, 3] = h / s
 
-    color = [127, 127, 127]
-    img = cv2.copyMakeBorder(img, t, b, l, r, cv2.BORDER_CONSTANT, value=color)
+                boxes = outs[:, :4]
+                scores = outs[:, -2]
+                class_ids = outs[:, -1]
 
-    img = np.array(img) / 255.0
-    img = np.transpose(img, (2, 0, 1))  # Channel first
-    img = np.expand_dims(img, axis=0).astype(np.float32)
+                results = []
+                for i in indices:
+                    class_id = int(class_ids[i])
+                    class_name = self.labels[int(class_ids[i])]
+                    score = round(float(scores[i]), 4)
+                    box = [(int(boxes[i][0]), int(boxes[i][1])), 
+                           (int(boxes[i][2]), int(boxes[i][3]))]
 
-    return img, (ratio, t, l)
+                    results.append([class_id, class_name, score, box])
 
+                return results
 
-def postprocess(outs, labels, task, scale, conf=0.5, iou=0.6):
-    """
-    Postprocess inference results.
+        elif self.task == 'pose':
+            nc = len(self.labels)
+            outs = np.transpose(np.squeeze(outs))
 
-    Args:
-        outs (list): Raw inference results.
-        conf (float): Confidence threshold to filter results.
-        iou (float): Intersection Over Union (IoU) threshold for Non-Maximum
-                     Suppression (NMS).
-
-    Returns:
-        results (list): Filtered results in the format of
-                        [[id, name, score, xmin, ymin, w, h], ...].
-    """
-    if task == 'classify':
-        class_id = np.argmax(outs[0][0])
-        class_name = labels[class_id]
-        score = outs[0][0][class_id]
-
-        return [class_id, class_name, score]
-
-    elif task == 'detect':
-        outs = np.squeeze(outs)
-        if outs.shape[-1] != 6:  # v8, shape: (4 + Number of categories, ...)
-            outs = np.transpose(outs)
-            boxes, scores, class_ids = [], [], []
-
-            max_scores = np.max(outs[:, 4:], axis=1)
-            class_ids = np.argmax(outs[:, 4:], axis=1)
-            valid_indices = np.where(max_scores >= conf)
+            max_scores = np.max(outs[:, 4:4 + nc], axis=1)
+            class_ids = np.argmax(outs[:, 4:4 + nc], axis=1)
+            valid_indices = np.where(max_scores >= self.conf_thres)
             outs = np.hstack((
                 outs[:, :4][valid_indices],
                 max_scores[valid_indices].reshape(-1, 1),
                 class_ids[valid_indices].reshape(-1, 1),
-            ))  # [[x, y, w, h, score, class_id], ...]
+                outs[:, 4 + nc:][valid_indices]
+            ))  # [[x, y, w, h, score, class_id, kpts], ...]
 
-            # Restore bboxes to original size
+            # Restore bboxes and keypoints to original size
+            s, t, l = self.scale
+
             x, y = outs[:, 0].copy(), outs[:, 1].copy()
             w, h = outs[:, 2].copy(), outs[:, 3].copy()
-            s, t, l = scale
             outs[:, 0] = ((x - w / 2) - l) / s
             outs[:, 1] = ((y - h / 2) - t) / s
             outs[:, 2] = w / s
             outs[:, 3] = h / s
 
-            # Use xyxy to NMS
-            # outs[:, 2] = ((x + w / 2) - l) / s
-            # outs[:, 3] = ((y + h / 2) - t) / s
+            x_cols = np.arange(6, outs.shape[1], 2)
+            y_cols = np.arange(7, outs.shape[1], 2)
+            kx, ky = outs[:, x_cols].copy(), outs[:, y_cols].copy()
+            outs[:, x_cols] = (kx - l) / s
+            outs[:, y_cols] = (ky - t) / s
 
             outs[:, :4] = outs[:, :4].astype(int)
+            outs[:, 6:] = outs[:, 6:].astype(int)
 
             boxes = outs[:, :4]
-            scores = outs[:, -2]
-            class_ids = outs[:, -1]
-
-            # Use xyxy to NMS
-            # indices = non_max_suppression(boxes, scores, iou)
-            # Use xywh to NMS
-            indices = cv2.dnn.NMSBoxes(boxes, scores, conf, iou)
-
-            results = [[int(class_ids[i]),
-                        labels[int(class_ids[i])],
-                        round(float(scores[i]), 4),
-                        *[int(j) for j in boxes[i]]] for i in indices]
-
-            return results
-
-        else:  # v10, shape: (300, 6)
             scores = outs[:, 4]
-            indices = np.where(scores > conf)[0]
-            outs = outs[indices, :]
+            class_ids = outs[:, 5]
+            kpts = outs[:, 6:]
+            indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf_thres, self.iou_thres)
 
-            # From xyxy to xywh
-            x1, y1 = outs[:, 0].copy(), outs[:, 1].copy()
-            x2, y2 = outs[:, 2].copy(), outs[:, 3].copy()
-            w, h = x2 - x1, y2 - y1
-            x, y = x1 + w / 2, y1 + h / 2
+            results = []
+            for i in indices:
+                class_id = int(class_ids[i])
+                class_name = self.labels[int(class_ids[i])]
+                score = round(float(scores[i]), 4)
+                box = [(int(boxes[i][0]), int(boxes[i][1])), 
+                       (int(boxes[i][2]), int(boxes[i][3]))]
+                kpt = [(int(kpts[i][j]), int(kpts[i][j + 1])) 
+                       for j in range(0, len(kpts[i]), 2)]
 
-            # Restore bboxes to original size
-            s, t, l = scale
-            outs[:, 0] = ((x - w / 2) - l) / s
-            outs[:, 1] = ((y - h / 2) - t) / s
-            outs[:, 2] = w / s
-            outs[:, 3] = h / s
-
-            boxes = outs[:, :4]
-            scores = outs[:, -2]
-            class_ids = outs[:, -1]
-
-            results = [[int(class_ids[i]),
-                        labels[int(class_ids[i])],
-                        round(float(scores[i]), 4),
-                        *[int(j) for j in boxes[i]]] for i in range(len(outs))]
+                results.append([class_id, class_name, score, box, kpt])
 
             return results
 
-    else:
-        print('Unsupported task.')
+        else:
+            print('Unsupported task.')
 
-        return None
+            return None
 
+    def draw_boxes(self, im, results):
+        """
+        Visualize boxes based on filtered results.
 
-def model_predict(session, img):
-    """
-    Main process to predict an image.
+        Args:
+            im (numpy.ndarray): Read by OpenCV.
+            results (list): Filtered results.
 
-    Args:
-        session: Onnx inference session.
-        img (numpy.ndarray): Image array.
+        Returns:
+            im (numpy.ndarray): Visualized image.
+        """
+        if self.task == 'classify':
+            print(f"Classify model doesn't support visualization.")
+            return im
 
-    Returns:
-        results (list): Final results in the format of
-                        [[id, name, score, xmin, ymin, w, h], ...].
-    """
-    model_info = session.get_modelmeta().custom_metadata_map
-    labels = ast.literal_eval(model_info['names'])  # {0: 'cat', 1: 'dog', ...}
-    imgsz = ast.literal_eval(model_info['imgsz'])  # [640, 640], [416, 416]
-    task = model_info['task']  # detect, classify
+        # Convert OpenCV image array to PIL image object
+        image = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
+        draw = ImageDraw.Draw(image)
 
-    image_data, scale = preprocess(img, imgsz[0])
-    input_name = session.get_inputs()[0].name
-    outputs = session.run(None, {input_name: image_data})
-    results = postprocess(outputs, labels, task, scale)
+        # Determines the line width of bboxes
+        im_w, im_h = image.size
+        lw = int(max(im_w, im_h) * 0.003) + 1 # line width
 
-    return results
+        colorset = [
+            (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
+            (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
+            (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
+            ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
+            (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
+            (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
+            (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
+            (217, 134, 177), (133, 111, 102), 
+        ]
+
+        for i in results:
+            label_id, label_name, conf, ((xmin, ymin), (w, h)) = i[:4]
+            kpts = i[4:]
+            xmax, ymax = xmin + w, ymin + h
+
+            # Determine the color of the label
+            color = colorset[label_id % len(colorset)]
+
+            # Draw bbox
+            draw.rectangle([(xmin, ymin), (xmax, ymax)],
+                           outline=color, width=lw)
+
+            # Draw label
+            text = f'{label_name} {conf * 100:.2f}%'
+            if min(im_w, im_h) < 600:
+                th = 12
+            else:
+                th = int(max(im_w, im_h) * 0.015)
+
+            font = ImageFont.truetype(self.font_path, th)
+            tw = draw.textlength(text, font=font)
+
+            x1 = xmin
+            y1 = ymin - th - lw
+            x2 = xmin + tw + lw
+            y2 = ymin
+
+            if y1 < 10:  # Label-top out of image
+                y1 = ymin
+                y2 = ymin + th + lw
+
+            if x2 > im_w:  # Label-right out of image
+                x1 = im_w - tw - lw
+                x2 = im_w
+
+            draw.rectangle(
+                [(x1, y1), (x2 + lw, y2)], 
+                fill=color, 
+                width=lw)
+            draw.text(
+                (x1 + lw, y1 + lw), 
+                text, 
+                font=font, 
+                fill=(255, 255, 255))
+
+            if kpts:
+                for idx, j in enumerate(kpts[0]):
+                    kpt_color = colorset[idx % len(colorset)]
+                    # top-left and bottom-right, lw as radius
+                    tl = (j[0] - lw, j[1] - lw)
+                    bw = (j[0] + lw, j[1] + lw) 
+                    draw.ellipse([tl, bw], fill=kpt_color)
+
+        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+    def predict(self, im, save_dir=None, visualize=False, font_path=None):
+        """
+        Run model inference on the input image.
+
+        Args:
+            im (numpy.ndarray|str): Read by OpenCV.
+            save_dir (str): Required if im is numpy.ndarray.
+
+        Returns:
+            results (list): Inference results after postprocessing.
+        """
+        self.visualize = visualize
+        self.font_path = font_path
+
+        # np.ndarray as input
+        if isinstance(im, np.ndarray):
+            t0 = time.time()
+            image_data = self.preprocess(im)
+            outputs = self.session.run(None, {self.input_name: image_data})
+            results = self.postprocess(outputs)
+            print(f'{self.task.capitalize()} Results: \n{results}')
+            print(f'Inference time: {(time.time() - t0) * 1000:.2f} ms')
+
+            if self.visualize and save_dir:
+                os.makedirs(save_dir, exist_ok=True)
+                save_path = os.path.join(save_dir, 'visualized.jpg')
+                cv2.imwrite(save_path, self.draw_boxes(im, results))
+                print(f'Visualized result saved at: {save_path}')
+            elif self.visualize and not save_dir:
+                print('Please specify save directory.')
+
+        # path as input
+        elif isinstance(im, str):
+            if self.visualize:
+                image_dir = os.path.dirname(im)
+                if not save_dir:
+                    save_dir = os.path.join(image_dir, 'visualized')
+                os.makedirs(save_dir, exist_ok=True)
+
+            if os.path.isfile(im):  # Single image
+                im_array = cv2.imread(im)
+                t0 = time.time()
+                image_data = self.preprocess(im_array)
+                outputs = self.session.run(None, {self.input_name: image_data})
+                results = self.postprocess(outputs)
+                print(f'{self.task.capitalize()} Results: \n{results}')
+                print(f'Inference time: {(time.time() - t0) * 1000:.2f} ms')
+
+                if self.visualize:
+                    save_path = os.path.join(save_dir, os.path.basename(im))
+                    cv2.imwrite(save_path, self.draw_boxes(im_array, results))
+                    print(f'Visualized result saved at: {save_path}')
+
+            else:  # Directory of images
+                t = 0
+                img_list = os.listdir(im)
+                for img in tqdm(img_list, total=len(img_list), desc='Processing'):
+                    img_path = os.path.join(im, img)
+                    if os.path.isdir(img_path):
+                        continue
+
+                    im_array = cv2.imread(img_path)
+                    t0 = time.time()
+                    image_data = self.preprocess(im_array)
+                    outputs = self.session.run(
+                        None, {self.input_name: image_data})
+                    results = self.postprocess(outputs)
+                    t += time.time() - t0
+
+                    if self.visualize:
+                        save_path = os.path.join(save_dir, os.path.basename(img_path))
+                        cv2.imwrite(save_path, self.draw_boxes(im_array, results))
+                print(f'Inference time:\n    Total: {t * 1000:.2f} ms')
+                print(f'    Avg: {t * 1000/ len(img_list):.2f} ms')
+                print(f'Visualized results saved at: {save_dir}')
+                results = None
+
+        # unsupported input
+        else:
+            print('Please double check your input.')
+            results = None
+
+        return results
 
 
 if __name__ == '__main__':
     image_dir = 'path/of/image/directory'  # Image file or directory
     model_path = 'path/of/model'  # Path of model
-    model = load_model(model_path)
+    font_path = 'path/of/font'  # Path of ttf font, required if visualize
+    save_dir = 'path/to/save'  # Path to save visualized results
 
-    if os.path.isfile(image_dir):
-        img = cv2.imread(image_dir)
-        results = model_predict(model, img)
-        print(results)
-
-    else:
-        for image in tqdm(os.listdir(image_dir), desc='Processing'):
-            img = cv2.imread(os.path.join(image_dir, image))
-            results = model_predict(model, img)
+    model = YOLOv8(model_path)
+    results = model.predict(
+        image_dir,
+        save_dir,
+        visualize=True,
+        font_path=font_path)
