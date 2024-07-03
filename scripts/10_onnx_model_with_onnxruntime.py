@@ -13,9 +13,10 @@ Update Log:
                 - Adapted inference for YOLOv8 classify model.
                 - Modified image preprocessing to proportional scaling and padding.
                 - Fixed issue with GPU inference failures.
-    2024-06-07: - Added support for YOLOv10.
+    2024-06-07: - Added support for YOLOv10 (detect).
     2024-07-02: - Adjusted code structure.
                 - Adapted inference for YOLOv8 pose model.
+    2024-07-03: - Adjusted code structure.
 
 """
 
@@ -32,8 +33,6 @@ from tqdm import tqdm
 
 class YOLOv8:
     """
-    A class for inferring various YOLOv8 models such as classification, detection, and pose estimation.
-
     This class handles the loading of the model, preprocessing of input images, postprocessing of model outputs,
     and visualization of the results. It supports different types of YOLOv8 models, including classification,
     object detection, and pose estimation.
@@ -123,6 +122,134 @@ class YOLOv8:
 
         return im
 
+    def classify_postproc(self, outs):
+        """
+        Postprocess of classify model.
+
+        Args:
+            outs (list): Inference results from the model.
+
+        Returns:
+            results (list): Filtered and formatted results. [id, name, score]
+        """
+        class_id = np.argmax(outs)
+        class_name = self.labels[class_id]
+        score = outs[class_id]
+
+        return [class_id, class_name, score]
+
+    def detect_postproc(self, outs):
+        """
+        Postprocess of detect model.
+
+        Args:
+            outs (list): Inference results from the model.
+
+        Returns:
+            results (list): Filtered and formatted results.
+                            [[id, name, score, [(xmin, ymin), (w, h)]], ...].
+        """
+        outs = np.transpose(outs)
+
+        max_scores = np.max(outs[:, 4:], axis=1)
+        class_ids = np.argmax(outs[:, 4:], axis=1)
+        valid_indices = np.where(max_scores >= self.conf_thres)
+        outs = np.hstack((
+            outs[:, :4][valid_indices],
+            max_scores[valid_indices].reshape(-1, 1),
+            class_ids[valid_indices].reshape(-1, 1),
+        ))  # [[x, y, w, h, score, class_id], ...]
+
+        # Restore bboxes to original size
+        x, y = outs[:, 0].copy(), outs[:, 1].copy()
+        w, h = outs[:, 2].copy(), outs[:, 3].copy()
+        s, t, l = self.scale
+        outs[:, 0] = ((x - w / 2) - l) / s
+        outs[:, 1] = ((y - h / 2) - t) / s
+        outs[:, 2] = w / s
+        outs[:, 3] = h / s
+        outs[:, :4] = outs[:, :4].astype(int)
+
+        boxes = outs[:, :4]
+        scores = outs[:, -2]
+        class_ids = outs[:, -1]
+        indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf_thres, self.iou_thres)
+
+        results = []
+        for i in indices:
+            class_id = int(class_ids[i])
+            class_name = self.labels[int(class_ids[i])]
+            score = round(float(scores[i]), 4)
+            box = [(int(boxes[i][0]), int(boxes[i][1])), 
+                   (int(boxes[i][2]), int(boxes[i][3]))]
+
+            results.append([class_id, class_name, score, box])
+
+        return results
+
+    def pose_postproc(self, outs):
+        """
+        Postprocess of pose model.
+
+        Args:
+            outs (list): Inference results from the model.
+
+        Returns:
+            results (list): Filtered and formatted results.
+                            [[id, name, score, [(xmin, ymin), (w, h)], [(x1, y1), (x2, y2), ...]], ...].
+        """
+        nc = len(self.labels)
+        outs = np.transpose(outs)
+
+        max_scores = np.max(outs[:, 4:4 + nc], axis=1)
+        class_ids = np.argmax(outs[:, 4:4 + nc], axis=1)
+        valid_indices = np.where(max_scores >= self.conf_thres)
+        outs = np.hstack((
+            outs[:, :4][valid_indices],
+            max_scores[valid_indices].reshape(-1, 1),
+            class_ids[valid_indices].reshape(-1, 1),
+            outs[:, 4 + nc:][valid_indices]
+        ))  # [[x, y, w, h, score, class_id, kpts], ...]
+
+        # Restore bboxes and keypoints to original size
+        s, t, l = self.scale
+
+        x, y = outs[:, 0].copy(), outs[:, 1].copy()
+        w, h = outs[:, 2].copy(), outs[:, 3].copy()
+        outs[:, 0] = ((x - w / 2) - l) / s
+        outs[:, 1] = ((y - h / 2) - t) / s
+        outs[:, 2] = w / s
+        outs[:, 3] = h / s
+
+        x_cols = np.arange(6, outs.shape[1], 2)
+        y_cols = np.arange(7, outs.shape[1], 2)
+        kx, ky = outs[:, x_cols].copy(), outs[:, y_cols].copy()
+        outs[:, x_cols] = (kx - l) / s
+        outs[:, y_cols] = (ky - t) / s
+
+        outs[:, :4] = outs[:, :4].astype(int)
+        outs[:, 6:] = outs[:, 6:].astype(int)
+
+        boxes = outs[:, :4]
+        scores = outs[:, 4]
+        class_ids = outs[:, 5]
+        kpts = outs[:, 6:]
+        indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf_thres, self.iou_thres)
+
+        results = []
+        for i in indices:
+            class_id = int(class_ids[i])
+            class_name = self.labels[int(class_ids[i])]
+            score = round(float(scores[i]), 4)
+            box = [(int(boxes[i][0]), int(boxes[i][1])), 
+                   (int(boxes[i][2]), int(boxes[i][3]))]
+            kpt = [(int(kpts[i][j]), int(kpts[i][j + 1])) 
+                   for j in range(0, len(kpts[i]), 2)]
+
+            results.append([class_id, class_name, score, box, kpt])
+
+        return results
+
     def postprocess(self, outs):
         """
         Postprocess the model inference results.
@@ -134,145 +261,22 @@ class YOLOv8:
             results (list): Filtered and formatted results.
                             [[id, name, score, [(xmin, ymin), (w, h)]], ...].
         """
-        if self.task == 'classify':
-            class_id = np.argmax(outs[0][0])
-            class_name = self.labels[class_id]
-            score = outs[0][0][class_id]
+        outs = np.squeeze(outs)
 
-            return [class_id, class_name, score]
+        if self.task == 'classify':
+            results = self.classify_postproc(outs)
 
         elif self.task == 'detect':
-            outs = np.squeeze(outs)
-            if outs.shape[-1] != 6:  # v8
-                outs = np.transpose(outs)
-
-                max_scores = np.max(outs[:, 4:], axis=1)
-                class_ids = np.argmax(outs[:, 4:], axis=1)
-                valid_indices = np.where(max_scores >= self.conf_thres)
-                outs = np.hstack((
-                    outs[:, :4][valid_indices],
-                    max_scores[valid_indices].reshape(-1, 1),
-                    class_ids[valid_indices].reshape(-1, 1),
-                ))  # [[x, y, w, h, score, class_id], ...]
-
-                # Restore bboxes to original size
-                x, y = outs[:, 0].copy(), outs[:, 1].copy()
-                w, h = outs[:, 2].copy(), outs[:, 3].copy()
-                s, t, l = self.scale
-                outs[:, 0] = ((x - w / 2) - l) / s
-                outs[:, 1] = ((y - h / 2) - t) / s
-                outs[:, 2] = w / s
-                outs[:, 3] = h / s
-                outs[:, :4] = outs[:, :4].astype(int)
-
-                boxes = outs[:, :4]
-                scores = outs[:, -2]
-                class_ids = outs[:, -1]
-                indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf_thres, self.iou_thres)
-
-                results = []
-                for i in indices:
-                    class_id = int(class_ids[i])
-                    class_name = self.labels[int(class_ids[i])]
-                    score = round(float(scores[i]), 4)
-                    box = [(int(boxes[i][0]), int(boxes[i][1])), 
-                           (int(boxes[i][2]), int(boxes[i][3]))]
-
-                    results.append([class_id, class_name, score, box])
-
-                return results
-
-            else:  # v10, shape: (300, 6)
-                scores = outs[:, 4]
-                indices = np.where(scores > self.conf_thres)[0]
-                outs = outs[indices, :]
-
-                # From xyxy to xywh
-                x1, y1 = outs[:, 0].copy(), outs[:, 1].copy()
-                x2, y2 = outs[:, 2].copy(), outs[:, 3].copy()
-                w, h = x2 - x1, y2 - y1
-                x, y = x1 + w / 2, y1 + h / 2
-
-                # Restore bboxes to original size
-                s, t, l = self.scale
-                outs[:, 0] = ((x - w / 2) - l) / s
-                outs[:, 1] = ((y - h / 2) - t) / s
-                outs[:, 2] = w / s
-                outs[:, 3] = h / s
-
-                boxes = outs[:, :4]
-                scores = outs[:, -2]
-                class_ids = outs[:, -1]
-
-                results = []
-                for i in indices:
-                    class_id = int(class_ids[i])
-                    class_name = self.labels[int(class_ids[i])]
-                    score = round(float(scores[i]), 4)
-                    box = [(int(boxes[i][0]), int(boxes[i][1])), 
-                           (int(boxes[i][2]), int(boxes[i][3]))]
-
-                    results.append([class_id, class_name, score, box])
-
-                return results
+            results = self.detect_postproc(outs)
 
         elif self.task == 'pose':
-            nc = len(self.labels)
-            outs = np.transpose(np.squeeze(outs))
-
-            max_scores = np.max(outs[:, 4:4 + nc], axis=1)
-            class_ids = np.argmax(outs[:, 4:4 + nc], axis=1)
-            valid_indices = np.where(max_scores >= self.conf_thres)
-            outs = np.hstack((
-                outs[:, :4][valid_indices],
-                max_scores[valid_indices].reshape(-1, 1),
-                class_ids[valid_indices].reshape(-1, 1),
-                outs[:, 4 + nc:][valid_indices]
-            ))  # [[x, y, w, h, score, class_id, kpts], ...]
-
-            # Restore bboxes and keypoints to original size
-            s, t, l = self.scale
-
-            x, y = outs[:, 0].copy(), outs[:, 1].copy()
-            w, h = outs[:, 2].copy(), outs[:, 3].copy()
-            outs[:, 0] = ((x - w / 2) - l) / s
-            outs[:, 1] = ((y - h / 2) - t) / s
-            outs[:, 2] = w / s
-            outs[:, 3] = h / s
-
-            x_cols = np.arange(6, outs.shape[1], 2)
-            y_cols = np.arange(7, outs.shape[1], 2)
-            kx, ky = outs[:, x_cols].copy(), outs[:, y_cols].copy()
-            outs[:, x_cols] = (kx - l) / s
-            outs[:, y_cols] = (ky - t) / s
-
-            outs[:, :4] = outs[:, :4].astype(int)
-            outs[:, 6:] = outs[:, 6:].astype(int)
-
-            boxes = outs[:, :4]
-            scores = outs[:, 4]
-            class_ids = outs[:, 5]
-            kpts = outs[:, 6:]
-            indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf_thres, self.iou_thres)
-
-            results = []
-            for i in indices:
-                class_id = int(class_ids[i])
-                class_name = self.labels[int(class_ids[i])]
-                score = round(float(scores[i]), 4)
-                box = [(int(boxes[i][0]), int(boxes[i][1])), 
-                       (int(boxes[i][2]), int(boxes[i][3]))]
-                kpt = [(int(kpts[i][j]), int(kpts[i][j + 1])) 
-                       for j in range(0, len(kpts[i]), 2)]
-
-                results.append([class_id, class_name, score, box, kpt])
-
-            return results
+            results = self.pose_postproc(outs)
 
         else:
             print('Unsupported task.')
+            results = None
 
-            return None
+        return results
 
     def draw_boxes(self, im, results):
         """
@@ -285,10 +289,6 @@ class YOLOv8:
         Returns:
             im (numpy.ndarray): Visualized image.
         """
-        if self.task == 'classify':
-            print(f"Classify model doesn't support visualization.")
-            return im
-
         # Convert OpenCV image array to PIL image object
         image = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
         draw = ImageDraw.Draw(image)
@@ -312,13 +312,10 @@ class YOLOv8:
             label_id, label_name, conf, ((xmin, ymin), (w, h)) = i[:4]
             kpts = i[4:]
             xmax, ymax = xmin + w, ymin + h
-
-            # Determine the color of the label
             color = colorset[label_id % len(colorset)]
 
             # Draw bbox
-            draw.rectangle([(xmin, ymin), (xmax, ymax)],
-                           outline=color, width=lw)
+            draw.rectangle([(xmin, ymin), (xmax, ymax)], outline=color, width=lw)
 
             # Draw label
             text = f'{label_name} {conf * 100:.2f}%'
@@ -353,6 +350,7 @@ class YOLOv8:
                 font=font, 
                 fill=(255, 255, 255))
 
+            # Draw keypoints
             if kpts:
                 for idx, j in enumerate(kpts[0]):
                     kpt_color = colorset[idx % len(colorset)]
@@ -374,7 +372,7 @@ class YOLOv8:
         Returns:
             results (list): Inference results after postprocessing.
         """
-        self.visualize = visualize
+        self.visualize = visualize if self.task != 'classify' else False
         self.font_path = font_path
 
         # np.ndarray as input
@@ -448,6 +446,67 @@ class YOLOv8:
         return results
 
 
+class YOLOv10(YOLOv8):
+    """
+    This class handles the loading of the model, preprocessing of input images, postprocessing of model outputs,
+    and visualization of the results. It supports different types of YOLOv10 models, including classification,
+    object detection, and pose estimation.
+
+    Attributes:
+        model_path (str): The path to the ONNX model file.
+        thread_num (int): The number of threads to use for inference. Default is -1 (use all available threads).
+        conf_thres (float): The confidence threshold for object detection. Default is 0.5.
+        iou_thres (float): The IoU threshold for non-max suppression. Default is 0.6.
+        session (onnxruntime.InferenceSession): The loaded ONNX model.
+        input_name (str): The name of the input node for the model.
+        visualize (bool): Whether to visualize the results. Default is False.
+        font_path (str): The path to the font file for visualization. Required if visualize is True.
+    """
+
+    def detect_postproc(self, outs):
+        """
+        Postprocess of detect model.
+
+        Args:
+            outs (list): Inference results from the model.
+
+        Returns:
+            results (list): Filtered and formatted results.
+                            [[id, name, score, [(xmin, ymin), (w, h)]], ...].
+        """
+        scores = outs[:, 4]
+        indices = np.where(scores > self.conf_thres)[0]
+        outs = outs[indices, :]
+
+        # From xyxy to xywh
+        x1, y1 = outs[:, 0].copy(), outs[:, 1].copy()
+        x2, y2 = outs[:, 2].copy(), outs[:, 3].copy()
+        w, h = x2 - x1, y2 - y1
+
+        # Restore bboxes to original size
+        s, t, l = self.scale
+        outs[:, 0] = (x1 - l) / s
+        outs[:, 1] = (y1 - t) / s
+        outs[:, 2] = w / s
+        outs[:, 3] = h / s
+
+        boxes = outs[:, :4]
+        scores = outs[:, -2]
+        class_ids = outs[:, -1]
+
+        results = []
+        for i in indices:
+            class_id = int(class_ids[i])
+            class_name = self.labels[int(class_ids[i])]
+            score = round(float(scores[i]), 4)
+            box = [(int(boxes[i][0]), int(boxes[i][1])), 
+                   (int(boxes[i][2]), int(boxes[i][3]))]
+
+            results.append([class_id, class_name, score, box])
+
+        return results
+
+
 if __name__ == '__main__':
     image_dir = 'path/of/image/directory'  # Image file or directory
     model_path = 'path/of/model'  # Path of model
@@ -460,3 +519,10 @@ if __name__ == '__main__':
         save_dir,
         visualize=True,
         font_path=font_path)
+
+    # model = YOLOv10(model_path)
+    # results = model.predict(
+    #     image_dir,
+    #     save_dir,
+    #     visualize=True,
+    #     font_path=font_path)
