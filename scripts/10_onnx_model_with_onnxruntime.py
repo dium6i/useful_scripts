@@ -513,15 +513,9 @@ if __name__ == '__main__':
     save_dir = 'path/to/save'  # Path to save visualized results
 
     model = YOLOv8(model_path)
+    # model = YOLOv10(model_path)
     results = model.predict(
         image_dir,
         save_dir,
         visualize=True,
         font_path=font_path)
-
-    # model = YOLOv10(model_path)
-    # results = model.predict(
-    #     image_dir,
-    #     save_dir,
-    #     visualize=True,
-    #     font_path=font_path)
