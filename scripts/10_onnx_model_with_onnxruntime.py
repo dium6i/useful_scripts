@@ -425,8 +425,7 @@ class YOLOv8:
                     im_array = cv2.imread(img_path)
                     t0 = time.time()
                     image_data = self.preprocess(im_array)
-                    outputs = self.session.run(
-                        None, {self.input_name: image_data})
+                    outputs = self.session.run(None, {self.input_name: image_data})
                     results = self.postprocess(outputs)
                     t += time.time() - t0
 
