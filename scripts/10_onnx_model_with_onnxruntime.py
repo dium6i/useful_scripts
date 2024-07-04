@@ -402,7 +402,7 @@ class YOLOv8:
                 current_file = self.img_path if self.img_path else os.path.abspath(__file__)
                 current_file_dir = os.path.dirname(current_file)
                 self.save_dir = os.path.join(current_file_dir, 'visualized')
-            os.makedirs(self.save_dir, exist_ok=True)
+                os.makedirs(self.save_dir, exist_ok=True)
 
             save_name = os.path.basename(self.img_path) if self.img_path else 'visualized.jpg'
             save_path = os.path.join(self.save_dir, save_name)
