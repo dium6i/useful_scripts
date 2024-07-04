@@ -199,7 +199,7 @@ class YOLOv8:
             results (list): Filtered and formatted results.
                             [[id, name, score, [(xmin, ymin), (w, h)], [(x1, y1), (x2, y2), ...]], ...].
         """
-        nc = len(self.labels)
+        nc = len(self.labels)  # number of classes
         outs = np.transpose(outs)
 
         max_scores = np.max(outs[:, 4:4 + nc], axis=1)
@@ -334,7 +334,7 @@ class YOLOv8:
 
         for i in results:
             label_id, label_name, conf, ((xmin, ymin), (w, h)) = i[:4]
-            kpts = i[4:]
+            kpts = i[4:]  # empty list if it is not a pose model
             xmax, ymax = xmin + w, ymin + h
             color = colorset[label_id % len(colorset)]
 
@@ -403,6 +403,7 @@ class YOLOv8:
                 current_file_dir = os.path.dirname(current_file)
                 self.save_dir = os.path.join(current_file_dir, 'visualized')
             os.makedirs(self.save_dir, exist_ok=True)
+
             save_name = os.path.basename(self.img_path) if self.img_path else 'visualized.jpg'
             save_path = os.path.join(self.save_dir, save_name)
             cv2.imwrite(save_path, self.draw_boxes(im, results))
@@ -414,8 +415,7 @@ class YOLOv8:
         Run model inference on the input image.
 
         Args:
-            im (numpy.ndarray|str): Input image array.
-            save_dir (str): Required if im is numpy.ndarray.
+            im (np.ndarray|str): Input image array or image(s) directory.
 
         Returns:
             results (list): Inference results after postprocessing.
@@ -424,7 +424,7 @@ class YOLOv8:
         self.visualize = visualize if self.task != 'classify' else False
         self.font_path = font_path
 
-        # np.ndarray as input
+        # numpy array as input
         if isinstance(im, np.ndarray):
             self.im_count = 1
             self.img_path = False
@@ -443,20 +443,18 @@ class YOLOv8:
             else:  # Directory of images
                 self.im_count = -1
                 t = 0
-                img_list = os.listdir(im)
+                img_list = [i for i in os.listdir(im) 
+                    if os.path.isfile(os.path.join(im, i))]
                 for img in tqdm(img_list, total=len(img_list), desc='Processing'):
                     img_path = os.path.join(im, img)
                     self.img_path = img_path
-                    if os.path.isdir(img_path):
-                        continue
-
                     im_array = cv2.imread(img_path)
                     results, dt = self.model_infer(im_array)
                     self.save_visualization(im_array, results)
                     t += dt
 
                 print(f'Inference time:\n    Total: {t * 1000:.2f} ms')
-                print(f'    Avg: {t * 1000/ len(img_list):.2f} ms')
+                print(f'    Avg: {t * 1000 / len(img_list):.2f} ms')
                 print(f'Visualized results saved at: {self.save_dir}')
                 results = None
 
