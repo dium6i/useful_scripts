@@ -387,8 +387,8 @@ class YOLOv8:
 
     def save_visualization(self, im, results):
         """
-        Create save folder in the directory where the current image file is
-        located, and save visualized images. When input is numpy.ndarray,
+        Create a save folder in the directory where the current image file is
+        located, and save the visualized images. When input is numpy.ndarray,
         set the code file as an image file.
 
         Args:
