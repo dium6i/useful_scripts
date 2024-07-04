@@ -17,6 +17,7 @@ Update Log:
     2024-07-02: - Adjusted code structure.
                 - Adapted inference for YOLOv8 pose model.
     2024-07-03: - Adjusted code structure.
+    2024-07-04: - Adjusted code structure.
 
 """
 
@@ -278,12 +279,35 @@ class YOLOv8:
 
         return results
 
+    def model_infer(self, im):
+        """
+        Model inference process.
+
+        Args:
+            im (numpy.ndarray): Input image array.
+
+        Returns:
+            results (list): Inference results after postprocessing.
+            dt (float): Inference time.
+        """
+        t0 = time.time()
+        image_data = self.preprocess(im)
+        outputs = self.session.run(None, {self.input_name: image_data})
+        results = self.postprocess(outputs)
+
+        if self.im_count == 1:
+            print(f'{self.task.capitalize()} Results: \n{results}')
+            print(f'Inference time: {(time.time() - t0) * 1000:.2f} ms')
+            return results
+        else:
+            return results, time.time() - t0
+
     def draw_boxes(self, im, results):
         """
         Visualize boxes based on filtered results.
 
         Args:
-            im (numpy.ndarray): Read by OpenCV.
+            im (numpy.ndarray): Input image array.
             results (list): Filtered results.
 
         Returns:
@@ -361,80 +385,79 @@ class YOLOv8:
 
         return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
+    def save_visualization(self, im, results):
+        """
+        Create save folder in the directory where the current image file is
+        located, and save visualized images. When input is numpy.ndarray,
+        set the code file as an image file.
+
+        Args:
+            im (numpy.ndarray): Input image array.
+            results (list): Inference results after postprocessing.
+
+        """
+        if self.visualize:
+            if not self.save_dir:
+                # os.path.abspath(__file__) is the path of current code file.
+                current_file = self.img_path if self.img_path else os.path.abspath(__file__)
+                current_file_dir = os.path.dirname(current_file)
+                self.save_dir = os.path.join(current_file_dir, 'visualized')
+            os.makedirs(self.save_dir, exist_ok=True)
+            save_name = os.path.basename(self.img_path) if self.img_path else 'visualized.jpg'
+            save_path = os.path.join(self.save_dir, save_name)
+            cv2.imwrite(save_path, self.draw_boxes(im, results))
+            if self.im_count == 1:
+                print(f'Visualized result saved at: {save_path}')
+
     def predict(self, im, save_dir=None, visualize=False, font_path=None):
         """
         Run model inference on the input image.
 
         Args:
-            im (numpy.ndarray|str): Read by OpenCV.
+            im (numpy.ndarray|str): Input image array.
             save_dir (str): Required if im is numpy.ndarray.
 
         Returns:
             results (list): Inference results after postprocessing.
         """
+        self.save_dir = save_dir
         self.visualize = visualize if self.task != 'classify' else False
         self.font_path = font_path
 
         # np.ndarray as input
         if isinstance(im, np.ndarray):
-            t0 = time.time()
-            image_data = self.preprocess(im)
-            outputs = self.session.run(None, {self.input_name: image_data})
-            results = self.postprocess(outputs)
-            print(f'{self.task.capitalize()} Results: \n{results}')
-            print(f'Inference time: {(time.time() - t0) * 1000:.2f} ms')
-
-            if self.visualize and save_dir:
-                os.makedirs(save_dir, exist_ok=True)
-                save_path = os.path.join(save_dir, 'visualized.jpg')
-                cv2.imwrite(save_path, self.draw_boxes(im, results))
-                print(f'Visualized result saved at: {save_path}')
-            elif self.visualize and not save_dir:
-                print('Please specify save directory.')
+            self.im_count = 1
+            self.img_path = False
+            results = self.model_infer(im)
+            self.save_visualization(im, results)
 
         # path as input
         elif isinstance(im, str):
-            if self.visualize:
-                image_dir = os.path.dirname(im)
-                if not save_dir:
-                    save_dir = os.path.join(image_dir, 'visualized')
-                os.makedirs(save_dir, exist_ok=True)
-
             if os.path.isfile(im):  # Single image
+                self.im_count = 1
+                self.img_path = im
                 im_array = cv2.imread(im)
-                t0 = time.time()
-                image_data = self.preprocess(im_array)
-                outputs = self.session.run(None, {self.input_name: image_data})
-                results = self.postprocess(outputs)
-                print(f'{self.task.capitalize()} Results: \n{results}')
-                print(f'Inference time: {(time.time() - t0) * 1000:.2f} ms')
-
-                if self.visualize:
-                    save_path = os.path.join(save_dir, os.path.basename(im))
-                    cv2.imwrite(save_path, self.draw_boxes(im_array, results))
-                    print(f'Visualized result saved at: {save_path}')
+                results = self.model_infer(im_array)
+                self.save_visualization(im_array, results)
 
             else:  # Directory of images
+                self.im_count = -1
                 t = 0
                 img_list = os.listdir(im)
                 for img in tqdm(img_list, total=len(img_list), desc='Processing'):
                     img_path = os.path.join(im, img)
+                    self.img_path = img_path
                     if os.path.isdir(img_path):
                         continue
 
                     im_array = cv2.imread(img_path)
-                    t0 = time.time()
-                    image_data = self.preprocess(im_array)
-                    outputs = self.session.run(None, {self.input_name: image_data})
-                    results = self.postprocess(outputs)
-                    t += time.time() - t0
+                    results, dt = self.model_infer(im_array)
+                    self.save_visualization(im_array, results)
+                    t += dt
 
-                    if self.visualize:
-                        save_path = os.path.join(save_dir, os.path.basename(img_path))
-                        cv2.imwrite(save_path, self.draw_boxes(im_array, results))
                 print(f'Inference time:\n    Total: {t * 1000:.2f} ms')
                 print(f'    Avg: {t * 1000/ len(img_list):.2f} ms')
-                print(f'Visualized results saved at: {save_dir}')
+                print(f'Visualized results saved at: {self.save_dir}')
                 results = None
 
         # unsupported input
