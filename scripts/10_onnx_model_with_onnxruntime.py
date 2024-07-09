@@ -96,7 +96,7 @@ class YOLOv8:
         Resize and pad the input image for model inference.
 
         Args:
-            im (numpy.ndarray): Input image array.
+            im (numpy.ndarray): Image array.
 
         Returns:
             im (numpy.ndarray): Preprocessed image data.
@@ -285,7 +285,7 @@ class YOLOv8:
         Model inference process.
 
         Args:
-            im (numpy.ndarray): Input image array.
+            im (numpy.ndarray): Image array.
 
         Returns:
             results (list): Inference results after postprocessing.
@@ -308,7 +308,7 @@ class YOLOv8:
         Visualize boxes based on filtered results.
 
         Args:
-            im (numpy.ndarray): Input image array.
+            im (numpy.ndarray): Image array.
             results (list): Filtered results.
 
         Returns:
@@ -392,7 +392,7 @@ class YOLOv8:
         set the code file as an image file.
 
         Args:
-            im (numpy.ndarray): Input image array.
+            im (numpy.ndarray): Image array.
             results (list): Inference results after postprocessing.
 
         """
@@ -415,7 +415,7 @@ class YOLOv8:
         Run model inference on the input image.
 
         Args:
-            im (np.ndarray|str): Input image array or image(s) directory.
+            im (np.ndarray|str): Image array or image(s) directory.
 
         Returns:
             results (list): Inference results after postprocessing.
