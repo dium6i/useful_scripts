@@ -18,6 +18,7 @@ Update Log:
                 - Adapted inference for YOLOv8 pose model.
     2024-07-03: - Adjusted code structure.
     2024-07-04: - Adjusted code structure.
+    2024-07-09: - Change bbox format from xywh to xyxy.
 
 """
 
@@ -62,7 +63,7 @@ class YOLOv8:
         self.thread_num = thread_num
         self.conf_thres = conf_thres
         self.iou_thres = iou_thres
-        
+
         self.initialize_model(model_path)
 
     def initialize_model(self, model_path):
@@ -182,7 +183,7 @@ class YOLOv8:
             class_name = self.labels[int(class_ids[i])]
             score = round(float(scores[i]), 4)
             box = [(int(boxes[i][0]), int(boxes[i][1])), 
-                   (int(boxes[i][2]), int(boxes[i][3]))]
+                   (int(boxes[i][0] + boxes[i][2]), int(boxes[i][1] + boxes[i][3]))]
 
             results.append([class_id, class_name, score, box])
 
@@ -243,7 +244,7 @@ class YOLOv8:
             class_name = self.labels[int(class_ids[i])]
             score = round(float(scores[i]), 4)
             box = [(int(boxes[i][0]), int(boxes[i][1])), 
-                   (int(boxes[i][2]), int(boxes[i][3]))]
+                   (int(boxes[i][0] + boxes[i][2]), int(boxes[i][1] + boxes[i][3]))]
             kpt = [(int(kpts[i][j]), int(kpts[i][j + 1])) 
                    for j in range(0, len(kpts[i]), 2)]
 
@@ -333,9 +334,8 @@ class YOLOv8:
         ]
 
         for i in results:
-            label_id, label_name, conf, ((xmin, ymin), (w, h)) = i[:4]
+            label_id, label_name, conf, ((xmin, ymin), (xmax, ymax)) = i[:4]
             kpts = i[4:]  # empty list if it is not a pose model
-            xmax, ymax = xmin + w, ymin + h
             color = colorset[label_id % len(colorset)]
 
             # Draw bbox
