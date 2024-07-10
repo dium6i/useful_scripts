@@ -421,8 +421,10 @@ class YOLOv8:
         Returns:
             results (list): Inference results after postprocessing.
         """
-        self.save_dir = save_dir if os.path.isdir(save_dir) else os.path.join(os.path.dirname(save_dir), 'visualized')
-        os.makedirs(self.save_dir, exist_ok=True)
+        self.save_dir = save_dir
+        if self.save_dir and os.path.isfile(save_dir):
+            self.save_dir = os.path.join(os.path.dirname(save_dir), 'visualized')
+            os.makedirs(self.save_dir, exist_ok=True)
         self.visualize = visualize if self.task != 'classify' else False
         self.font_path = font_path
 
