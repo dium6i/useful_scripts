@@ -19,6 +19,7 @@ Update Log:
     2024-07-03: - Adjusted code structure.
     2024-07-04: - Adjusted code structure.
     2024-07-09: - Change bbox format from xywh to xyxy.
+    2024-07-10: - Bug fixes.
 
 """
 
@@ -420,7 +421,8 @@ class YOLOv8:
         Returns:
             results (list): Inference results after postprocessing.
         """
-        self.save_dir = save_dir
+        self.save_dir = save_dir if os.path.isdir(save_dir) else os.path.join(os.path.dirname(save_dir), 'visualized')
+        os.makedirs(self.save_dir, exist_ok=True)
         self.visualize = visualize if self.task != 'classify' else False
         self.font_path = font_path
 
