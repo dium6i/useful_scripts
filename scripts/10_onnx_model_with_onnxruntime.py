@@ -139,7 +139,7 @@ class YOLOv8:
         class_name = self.labels[class_id]
         score = outs[class_id]
 
-        return [class_id, class_name, score]
+        return [[class_id, class_name, score]]
 
     def detect_postproc(self, outs):
         """
@@ -298,7 +298,8 @@ class YOLOv8:
         results = self.postprocess(outputs)
 
         if self.im_count == 1:
-            print(f'{self.task.capitalize()} Results: \n{results}')
+            print(f'{self.task.capitalize()} Results:')
+            list(map(print, results))
             print(f'Inference time: {(time.time() - t0) * 1000:.2f} ms')
             return results
         else:
