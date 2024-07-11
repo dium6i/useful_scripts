@@ -20,6 +20,7 @@ Update Log:
     2024-07-04: - Adjusted code structure.
     2024-07-09: - Change bbox format from xywh to xyxy.
     2024-07-10: - Bug fixes.
+    2024-07-11: - Bug fixes.
 
 """
 
@@ -296,14 +297,15 @@ class YOLOv8:
         image_data = self.preprocess(im)
         outputs = self.session.run(None, {self.input_name: image_data})
         results = self.postprocess(outputs)
+        dt = time.time() - t0
 
         if self.im_count == 1:
             print(f'{self.task.capitalize()} Results:')
             list(map(print, results))
-            print(f'Inference time: {(time.time() - t0) * 1000:.2f} ms')
+            print(f'Inference time: {dt * 1000:.2f} ms')
             return results
         else:
-            return results, time.time() - t0
+            return results, dt
 
     def draw_boxes(self, im, results):
         """
@@ -447,9 +449,9 @@ class YOLOv8:
 
             else:  # Directory of images
                 self.im_count = -1
-                t = 0
                 img_list = [i for i in os.listdir(im) 
                     if os.path.isfile(os.path.join(im, i))]
+                t = 0
                 for img in tqdm(img_list, total=len(img_list), desc='Processing'):
                     img_path = os.path.join(im, img)
                     self.img_path = img_path
