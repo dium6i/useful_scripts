@@ -8,6 +8,7 @@ Update Log:
     2024-06-07: - Optimized code structure.
     2024-06-26: - Optimized code structure.
     2024-07-10: - Changed the inference engine from FastDeploy to RapidOCR.
+    2024-07-11: - Bug fixes.
 
 """
 
@@ -181,9 +182,9 @@ class OCR:
 
             else:  # Directory of images
                 self.im_count = -1
-                t = 0
                 img_list = [i for i in os.listdir(im) 
                     if os.path.isfile(os.path.join(im, i))]
+                t = 0
                 for img in tqdm(img_list, total=len(img_list), desc='Processing'):
                     img_path = os.path.join(im, img)
                     self.img_path = img_path
@@ -194,7 +195,8 @@ class OCR:
 
                 print(f'Inference time:\n    Total: {t * 1000:.2f} ms')
                 print(f'    Avg: {t * 1000 / len(img_list):.2f} ms')
-                print(f'Visualized results saved at: {self.save_dir}')
+                if self.visualize:
+                    print(f'Visualized results saved at: {self.save_dir}')
                 results = None
 
         # Unsupported input
