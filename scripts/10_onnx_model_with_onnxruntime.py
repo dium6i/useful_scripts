@@ -462,7 +462,8 @@ class YOLOv8:
 
                 print(f'Inference time:\n    Total: {t * 1000:.2f} ms')
                 print(f'    Avg: {t * 1000 / len(img_list):.2f} ms')
-                print(f'Visualized results saved at: {self.save_dir}')
+                if self.visualize:
+                    print(f'Visualized results saved at: {self.save_dir}')
                 results = None
 
         # unsupported input
