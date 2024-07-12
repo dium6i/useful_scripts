@@ -21,17 +21,18 @@ Update Log:
     2024-07-09: - Change bbox format from xywh to xyxy.
     2024-07-10: - Bug fixes.
     2024-07-11: - Bug fixes.
+    2024-07-12: - Bug fixes.
 
 """
 
 import ast
 import os
+import time
 
 import cv2
 import numpy as np
-import onnxruntime as ort
+from onnxruntime import InferenceSession, SessionOptions
 from PIL import Image, ImageDraw, ImageFont
-import time
 from tqdm import tqdm
 
 
@@ -75,12 +76,13 @@ class YOLOv8:
         Args:
             model_path (str): Path to the ONNX model file.
         """
-        if self.thread_num == -1:
-            self.thread_num = os.cpu_count()
+        session_options = SessionOptions()
 
-        session_options = ort.SessionOptions()
-        session_options.intra_op_num_threads = self.thread_num
-        self.session = ort.InferenceSession(model_path, session_options)
+        cpu_nums = os.cpu_count()
+        if self.thread_num != -1 and 1 <= self.thread_num <= cpu_nums:
+            session_options.intra_op_num_threads = self.thread_num
+
+        self.session = InferenceSession(model_path, session_options)
         self.input_name = self.session.get_inputs()[0].name
 
         model_info = self.session.get_modelmeta().custom_metadata_map
@@ -547,4 +549,5 @@ if __name__ == '__main__':
         image_dir,
         save_dir,
         visualize=True,
-        font_path=font_path)
+        font_path=font_path
+        )
