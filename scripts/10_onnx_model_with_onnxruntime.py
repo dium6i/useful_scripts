@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Author: Wei Qin
 Date: 2024-03-26
