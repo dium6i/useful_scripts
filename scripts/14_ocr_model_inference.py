@@ -60,10 +60,11 @@ class OCR:
 
         # Rearrange and filter res
         results = []
-        for result in res:
-            bbox, text, score = result
-            box_wh = (bbox[1][0] - bbox[0][0], bbox[-1][1] - bbox[0][1])
-            results.append([bbox, box_wh, text, score])
+        if res:
+            for result in res:
+                bbox, text, score = result
+                box_wh = (bbox[1][0] - bbox[0][0], bbox[-1][1] - bbox[0][1])
+                results.append([bbox, box_wh, text, score])
 
         if self.im_count == 1:
             print(f'OCR Results:')
