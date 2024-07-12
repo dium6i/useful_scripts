@@ -9,6 +9,7 @@ Update Log:
     2024-06-26: - Optimized code structure.
     2024-07-10: - Changed the inference engine from FastDeploy to RapidOCR.
     2024-07-11: - Bug fixes.
+    2024-07-12: - Bug fixes.
 
 """
 
@@ -28,7 +29,8 @@ class OCR:
             text_score=0.5,
             det_model_path=None,
             det_unclip_ratio=1.6,
-            rec_model_path=None):
+            rec_model_path=None,
+            intra_op_num_threads=-1):
         """
         RapidOCR has built-in general OCR models(PPOCRv4).
         If costomized models need to be used, det_model_path and rec_model_path
@@ -38,7 +40,8 @@ class OCR:
             text_score=text_score,
             det_model_path=det_model_path,
             det_unclip_ratio=det_unclip_ratio,
-            rec_model_path=rec_model_path)
+            rec_model_path=rec_model_path,
+            intra_op_num_threads=intra_op_num_threads)
 
     def model_infer(self, im):
         """
