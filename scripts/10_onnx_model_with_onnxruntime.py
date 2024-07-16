@@ -23,6 +23,7 @@ Update Log:
     2024-07-10: - Bug fixes.
     2024-07-11: - Bug fixes.
     2024-07-12: - Bug fixes.
+    2024-07-16: - Optimized output format.
 
 """
 
@@ -305,7 +306,7 @@ class YOLOv8:
         if self.im_count == 1:
             print(f'{self.task.capitalize()} Results:')
             list(map(print, results))
-            print(f'Inference time: {dt * 1000:.2f} ms')
+            print(f'Inference time of {self.task.capitalize()} model: {dt * 1000:.2f} ms')
             return results
         else:
             return results, dt
