@@ -69,8 +69,8 @@ class OCR:
                 results.append([bbox, box_wh, text, float(score)])
 
         if self.im_count == 1:
-            print(f'OCR Results:')
-            list(map(print, results))
+            print(f'OCR Results (first 10):')
+            list(map(print, results[:10]))
             print(f'Inference time: {dt * 1000:.2f} ms')
             return results
         else:
