@@ -11,6 +11,7 @@ Update Log:
     2024-07-10: - Changed the inference engine from FastDeploy to RapidOCR.
     2024-07-11: - Bug fixes.
     2024-07-12: - Bug fixes.
+    2024-07-16: - Optimized output format.
 
 """
 
@@ -65,7 +66,7 @@ class OCR:
             for result in res:
                 bbox, text, score = result
                 box_wh = (bbox[1][0] - bbox[0][0], bbox[-1][1] - bbox[0][1])
-                results.append([bbox, box_wh, text, score])
+                results.append([bbox, box_wh, text, float(score)])
 
         if self.im_count == 1:
             print(f'OCR Results:')
