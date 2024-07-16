@@ -23,7 +23,7 @@ Update Log:
     2024-07-10: - Bug fixes.
     2024-07-11: - Bug fixes.
     2024-07-12: - Bug fixes.
-    2024-07-16: - Optimized output format.
+    2024-07-16: - Optimized output format and visualizd image.
 
 """
 
@@ -391,7 +391,11 @@ class YOLOv8:
                     bw = (j[0] + lw, j[1] + lw) 
                     draw.ellipse([tl, bw], fill=kpt_color)
 
-        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        # Blend drawed image and src image for transparent labels
+        drawed = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        cv2.addWeighted(drawed, 0.65, im, 0.35, 0, drawed)
+
+        return drawed
 
     def save_visualization(self, im, results):
         """
