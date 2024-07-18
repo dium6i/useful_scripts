@@ -24,6 +24,7 @@ Update Log:
     2024-07-11: - Bug fixes.
     2024-07-12: - Bug fixes.
     2024-07-16: - Optimized output format and visualizd image.
+    2024-07-18: - Bug fixes.
 
 """
 
@@ -414,8 +415,11 @@ class YOLOv8:
                 current_file = self.img_path if self.img_path else os.path.abspath(__file__)
                 current_file_dir = os.path.dirname(current_file)
                 self.save_dir = os.path.join(current_file_dir, 'visualized')
-                os.makedirs(self.save_dir, exist_ok=True)
 
+            elif self.save_dir and os.path.isfile(self.save_dir):
+                self.save_dir = os.path.join(os.path.dirname(self.save_dir), 'visualized')
+
+            os.makedirs(self.save_dir, exist_ok=True)
             save_name = os.path.basename(self.img_path) if self.img_path else 'visualized.jpg'
             save_path = os.path.join(self.save_dir, save_name)
             cv2.imwrite(save_path, self.draw_boxes(im, results))
@@ -433,9 +437,6 @@ class YOLOv8:
             results (list): Inference results after postprocessing.
         """
         self.save_dir = save_dir
-        if self.save_dir and os.path.isfile(save_dir):
-            self.save_dir = os.path.join(os.path.dirname(save_dir), 'visualized')
-            os.makedirs(self.save_dir, exist_ok=True)
         self.visualize = visualize if self.task != 'classify' else False
         self.font_path = font_path
 
