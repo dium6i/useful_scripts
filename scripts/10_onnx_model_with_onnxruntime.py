@@ -25,6 +25,7 @@ Update Log:
     2024-07-12: - Bug fixes.
     2024-07-16: - Optimized output format and visualizd image.
     2024-07-18: - Bug fixes.
+    2024-07-24: - Added support for YOLOv8 obb model.
 
 """
 
@@ -69,6 +70,16 @@ class YOLOv8:
         self.thread_num = thread_num
         self.conf_thres = conf_thres
         self.iou_thres = iou_thres
+        self.colorset = [
+            (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
+            (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
+            (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
+            ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
+            (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
+            (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
+            (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
+            (217, 134, 177), (133, 111, 102), 
+        ]
 
         self.initialize_model(model_path)
 
@@ -259,6 +270,80 @@ class YOLOv8:
 
         return results
 
+    def xywhr2xyxyxyxy(self, array):
+        """
+        Convert Oriented Bounding Boxes (OBB) from xywhr to xyxyxyxy.
+        Rotation values should be in radian from 0 to 90.
+
+        Args:
+            array (numpy.ndarray): Box in [x, y, w, h, r] format.
+
+        Returns:
+            results (numpy.ndarray): Converted box in [[x1, y1], [x2, y2], [x3, y3], [x4, y4]] format.
+        """
+        ctr = array[:2]
+        w, h, angle = array[2:]
+        cos_value, sin_value = np.cos(angle), np.sin(angle)
+        vec1 = [w / 2 * cos_value, w / 2 * sin_value]
+        vec2 = [-h / 2 * sin_value, h / 2 * cos_value]
+
+        pt1 = ctr + vec1 + vec2
+        pt2 = ctr + vec1 - vec2
+        pt3 = ctr - vec1 - vec2
+        pt4 = ctr - vec1 + vec2
+
+        return np.stack([pt1, pt2, pt3, pt4]).astype(int)
+
+    def obb_postproc(self, outs):
+        """
+        Postprocess of obb model.
+
+        Args:
+            outs (list): Inference results from the model.
+
+        Returns:
+            results (list): Filtered and formatted results.
+                            [[id, name, score, [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]], ...].
+        """
+        nc = len(self.labels)  # number of classes
+        outs = np.transpose(outs)
+
+        max_scores = np.max(outs[:, 4:4 + nc], axis=1)
+        class_ids = np.argmax(outs[:, 4:4 + nc], axis=1)
+        valid_indices = np.where(max_scores >= self.conf_thres)
+        outs = np.hstack((
+            outs[:, :4][valid_indices],
+            outs[:, -1][valid_indices].reshape(-1, 1),
+            max_scores[valid_indices].reshape(-1, 1),
+            class_ids[valid_indices].reshape(-1, 1),
+        ))  # [[x, y, w, h, r, score, class_id], ...]
+
+        # Restore bboxes to original size
+        x, y = outs[:, 0].copy(), outs[:, 1].copy()
+        w, h = outs[:, 2].copy(), outs[:, 3].copy()
+        s, t, l = self.scale
+        outs[:, 0] = (x - l) / s
+        outs[:, 1] = (y - t) / s
+        outs[:, 2] = w / s
+        outs[:, 3] = h / s
+        outs[:, :4] = outs[:, :4].astype(int)
+
+        boxes = outs[:, :4]
+        scores = outs[:, -2]
+        class_ids = outs[:, -1]
+        indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf_thres, self.iou_thres)
+
+        results = []
+        for i in indices:
+            class_id = int(class_ids[i])
+            class_name = self.labels[int(class_ids[i])]
+            score = round(float(scores[i]), 4)
+            box = self.xywhr2xyxyxyxy(outs[:, :5][i]).tolist()
+
+            results.append([class_id, class_name, score, box])
+
+        return results
+
     def postprocess(self, outs):
         """
         Postprocess the model inference results.
@@ -280,6 +365,9 @@ class YOLOv8:
 
         elif self.task == 'pose':
             results = self.pose_postproc(outs)
+
+        elif self.task == 'obb':
+            results = self.obb_postproc(outs)
 
         else:
             print('Unsupported task.')
@@ -331,21 +419,10 @@ class YOLOv8:
         im_w, im_h = image.size
         lw = int(max(im_w, im_h) * 0.003) + 1 # line width
 
-        colorset = [
-            (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
-            (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
-            (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
-            ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
-            (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
-            (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
-            (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
-            (217, 134, 177), (133, 111, 102), 
-        ]
-
         for i in results:
             label_id, label_name, conf, ((xmin, ymin), (xmax, ymax)) = i[:4]
             kpts = i[4:]  # empty list if it is not a pose model
-            color = colorset[label_id % len(colorset)]
+            color = self.colorset[label_id % len(self.colorset)]
 
             # Draw bbox
             draw.rectangle([(xmin, ymin), (xmax, ymax)], outline=color, width=lw)
@@ -374,11 +451,11 @@ class YOLOv8:
                 x2 = im_w
 
             draw.rectangle(
-                [(x1, y1), (x2 + lw, y2)], 
+                [(x1, y1 - lw), (x2 + lw, y2)], 
                 fill=color, 
                 width=lw)
             draw.text(
-                (x1 + lw, y1 + lw), 
+                (x1 + lw, y1), 
                 text, 
                 font=font, 
                 fill=(255, 255, 255))
@@ -386,11 +463,63 @@ class YOLOv8:
             # Draw keypoints
             if kpts:
                 for idx, j in enumerate(kpts[0]):
-                    kpt_color = colorset[idx % len(colorset)]
+                    kpt_color = self.colorset[idx % len(self.colorset)]
                     # top-left and bottom-right, lw as radius
                     tl = (j[0] - lw, j[1] - lw)
                     bw = (j[0] + lw, j[1] + lw) 
                     draw.ellipse([tl, bw], fill=kpt_color)
+
+        # Blend drawed image and src image for transparent labels
+        drawed = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        cv2.addWeighted(drawed, 0.65, im, 0.35, 0, drawed)
+
+        return drawed
+
+    def draw_obb_boxes(self, im, results):
+        """
+        Visualize obb boxes based on filtered results.
+
+        Args:
+            im (numpy.ndarray): Image array.
+            results (list): Filtered results.
+
+        Returns:
+            im (numpy.ndarray): Visualized image.
+        """
+        # Convert OpenCV image array to PIL image object
+        image = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
+        draw = ImageDraw.Draw(image)
+
+        # Determines the line width of bboxes
+        im_w, im_h = image.size
+        lw = int(max(im_w, im_h) * 0.003) + 1 # line width
+
+        for i in results:
+            label_id, label_name, conf, ((x1, y1), (x2, y2), (x3, y3), (x4, y4)) = i
+            color = self.colorset[label_id % len(self.colorset)]
+
+            # Draw bbox
+            draw.polygon([(x1, y1), (x2, y2), (x3, y3), (x4, y4)], outline=color, width=lw)
+
+            # Draw label
+            text = f'{label_name} {conf * 100:.2f}%'
+            if min(im_w, im_h) < 600:
+                th = 12
+            else:
+                th = int(max(im_w, im_h) * 0.015)
+
+            font = ImageFont.truetype(self.font_path, th)
+            tw = int(draw.textlength(text, font=font))
+
+            draw.rectangle(
+                [(x1, y1 - th - lw * 2), (x1 + tw + lw, y1)], 
+                fill=color, 
+                width=lw)
+            draw.text(
+                (x1 + lw, y1 - th - lw), 
+                text, 
+                font=font, 
+                fill=(255, 255, 255))
 
         # Blend drawed image and src image for transparent labels
         drawed = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
@@ -422,7 +551,12 @@ class YOLOv8:
             os.makedirs(self.save_dir, exist_ok=True)
             save_name = os.path.basename(self.img_path) if self.img_path else 'visualized.jpg'
             save_path = os.path.join(self.save_dir, save_name)
-            cv2.imwrite(save_path, self.draw_boxes(im, results))
+
+            if self.task != 'obb':
+                cv2.imwrite(save_path, self.draw_boxes(im, results))
+            else:
+                cv2.imwrite(save_path, self.draw_obb_boxes(im, results))
+
             if self.im_count == 1:
                 print(f'Visualized result saved at: {save_path}')
 
