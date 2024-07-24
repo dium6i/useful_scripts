@@ -287,6 +287,7 @@ class YOLOv8:
         vec1 = [w / 2 * cos_value, w / 2 * sin_value]
         vec2 = [-h / 2 * sin_value, h / 2 * cos_value]
 
+        # Using vectors to calculate the coordinates of each point
         pt1 = ctr + vec1 + vec2
         pt2 = ctr + vec1 - vec2
         pt3 = ctr - vec1 - vec2
