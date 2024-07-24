@@ -303,7 +303,7 @@ class YOLOv8:
 
         Returns:
             results (list): Filtered and formatted results.
-                            [[id, name, score, [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]], ...].
+                            [[id, name, score, [x, y, w, h, r], [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]], ...].
         """
         nc = len(self.labels)  # number of classes
         outs = np.transpose(outs)
@@ -339,8 +339,10 @@ class YOLOv8:
             class_name = self.labels[int(class_ids[i])]
             score = round(float(scores[i]), 4)
             box = self.xywhr2xyxyxyxy(outs[:, :5][i]).tolist()
+            box_r_list = outs[:, :5][i].tolist()
+            box_r = [int(num) for num in box_r_list[:4]] + [round(box_r_list[4], 4)]
 
-            results.append([class_id, class_name, score, box])
+            results.append([class_id, class_name, score, box_r, box])
 
         return results
 
@@ -495,7 +497,7 @@ class YOLOv8:
         lw = int(max(im_w, im_h) * 0.003) + 1 # line width
 
         for i in results:
-            label_id, label_name, conf, ((x1, y1), (x2, y2), (x3, y3), (x4, y4)) = i
+            label_id, label_name, conf, _, ((x1, y1), (x2, y2), (x3, y3), (x4, y4)) = i
             color = self.colorset[label_id % len(self.colorset)]
 
             # Draw bbox
