@@ -544,7 +544,6 @@ class YOLOv10(YOLOv8):
             class_id = int(class_ids[i])
             class_name = self.labels[class_id]
             score = round(float(scores[i]), 4)
-            print(boxes[i])
             box = self.xywh2xyxy(boxes[i])
 
             results.append([class_id, class_name, score, box, [], []])
