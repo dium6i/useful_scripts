@@ -26,6 +26,7 @@ Update Log:
     2024-07-16: - Optimized output format and visualizd image.
     2024-07-18: - Bug fixes.
     2024-07-24: - Added support for YOLOv8 obb model.
+    2024-07-30: - Adjusted code structure.
 
 """
 
@@ -114,10 +115,10 @@ class YOLOv8:
         Resize and pad the input image for model inference.
 
         Args:
-            im (numpy.ndarray): Image array.
+            im (np.ndarray): Image array.
 
         Returns:
-            im (numpy.ndarray): Preprocessed image data.
+            im (np.ndarray): Preprocessed image data.
         """
         im = cv2.cvtColor(im.copy(), cv2.COLOR_BGR2RGB)
         h, w, _ = im.shape
@@ -142,147 +143,39 @@ class YOLOv8:
 
         return im
 
-    def classify_postproc(self, outs):
+    def xywh2xyxy(self, x):
         """
-        Postprocess of classify model.
+        Convert bounding box coordinates from xywh to xyxy.
 
         Args:
-            outs (list): Inference results from the model.
+            x (np.ndarray): Box in [x, y, w, h] format.
 
         Returns:
-            results (list): Filtered and formatted results. [id, name, score]
+            y (list): Converted box in [(x1, y1), (x2, y2)] format.
         """
-        class_id = np.argmax(outs)
-        class_name = self.labels[class_id]
-        score = outs[class_id]
+        y = np.empty_like(x)  # faster than clone/copy
+        xy = x[:2]  # centers
+        wh = x[2:] / 2  # half width-height
+        y[:2] = xy - wh  # top left xy
+        y[2:] = xy + wh  # bottom right xy
+        y = y.astype(int)
+        y = list(zip(y[::2], y[1::2]))
 
-        return [[class_id, class_name, score]]
+        return y
 
-    def detect_postproc(self, outs):
+    def xywhr2xyxyxyxy(self, x):
         """
-        Postprocess of detect model.
-
-        Args:
-            outs (list): Inference results from the model.
-
-        Returns:
-            results (list): Filtered and formatted results.
-                            [[id, name, score, [(xmin, ymin), (w, h)]], ...].
-        """
-        outs = np.transpose(outs)
-
-        max_scores = np.max(outs[:, 4:], axis=1)
-        class_ids = np.argmax(outs[:, 4:], axis=1)
-        valid_indices = np.where(max_scores >= self.conf_thres)
-        outs = np.hstack((
-            outs[:, :4][valid_indices],
-            max_scores[valid_indices].reshape(-1, 1),
-            class_ids[valid_indices].reshape(-1, 1),
-        ))  # [[x, y, w, h, score, class_id], ...]
-
-        # Restore bboxes to original size
-        x, y = outs[:, 0].copy(), outs[:, 1].copy()
-        w, h = outs[:, 2].copy(), outs[:, 3].copy()
-        s, t, l = self.scale
-        outs[:, 0] = ((x - w / 2) - l) / s
-        outs[:, 1] = ((y - h / 2) - t) / s
-        outs[:, 2] = w / s
-        outs[:, 3] = h / s
-        outs[:, :4] = outs[:, :4].astype(int)
-
-        boxes = outs[:, :4]
-        scores = outs[:, -2]
-        class_ids = outs[:, -1]
-        indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf_thres, self.iou_thres)
-
-        results = []
-        for i in indices:
-            class_id = int(class_ids[i])
-            class_name = self.labels[int(class_ids[i])]
-            score = round(float(scores[i]), 4)
-            box = [(int(boxes[i][0]), int(boxes[i][1])), 
-                   (int(boxes[i][0] + boxes[i][2]), int(boxes[i][1] + boxes[i][3]))]
-
-            results.append([class_id, class_name, score, box])
-
-        return results
-
-    def pose_postproc(self, outs):
-        """
-        Postprocess of pose model.
-
-        Args:
-            outs (list): Inference results from the model.
-
-        Returns:
-            results (list): Filtered and formatted results.
-                            [[id, name, score, [(xmin, ymin), (w, h)], [(x1, y1), (x2, y2), ...]], ...].
-        """
-        nc = len(self.labels)  # number of classes
-        outs = np.transpose(outs)
-
-        max_scores = np.max(outs[:, 4:4 + nc], axis=1)
-        class_ids = np.argmax(outs[:, 4:4 + nc], axis=1)
-        valid_indices = np.where(max_scores >= self.conf_thres)
-        outs = np.hstack((
-            outs[:, :4][valid_indices],
-            max_scores[valid_indices].reshape(-1, 1),
-            class_ids[valid_indices].reshape(-1, 1),
-            outs[:, 4 + nc:][valid_indices]
-        ))  # [[x, y, w, h, score, class_id, kpts], ...]
-
-        # Restore bboxes and keypoints to original size
-        s, t, l = self.scale
-
-        x, y = outs[:, 0].copy(), outs[:, 1].copy()
-        w, h = outs[:, 2].copy(), outs[:, 3].copy()
-        outs[:, 0] = ((x - w / 2) - l) / s
-        outs[:, 1] = ((y - h / 2) - t) / s
-        outs[:, 2] = w / s
-        outs[:, 3] = h / s
-
-        x_cols = np.arange(6, outs.shape[1], 2)
-        y_cols = np.arange(7, outs.shape[1], 2)
-        kx, ky = outs[:, x_cols].copy(), outs[:, y_cols].copy()
-        outs[:, x_cols] = (kx - l) / s
-        outs[:, y_cols] = (ky - t) / s
-
-        outs[:, :4] = outs[:, :4].astype(int)
-        outs[:, 6:] = outs[:, 6:].astype(int)
-
-        boxes = outs[:, :4]
-        scores = outs[:, 4]
-        class_ids = outs[:, 5]
-        kpts = outs[:, 6:]
-        indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf_thres, self.iou_thres)
-
-        results = []
-        for i in indices:
-            class_id = int(class_ids[i])
-            class_name = self.labels[int(class_ids[i])]
-            score = round(float(scores[i]), 4)
-            box = [(int(boxes[i][0]), int(boxes[i][1])), 
-                   (int(boxes[i][0] + boxes[i][2]), int(boxes[i][1] + boxes[i][3]))]
-            kpt = [(int(kpts[i][j]), int(kpts[i][j + 1])) 
-                   for j in range(0, len(kpts[i]), 2)]
-
-            results.append([class_id, class_name, score, box, kpt])
-
-        return results
-
-    def xywhr2xyxyxyxy(self, array):
-        """
-        Convert Oriented Bounding Boxes (OBB) from xywhr to xyxyxyxy.
+        Convert Oriented Bounding Boxes (OBB) coordinates from xywhr to xyxyxyxy.
         Rotation values should be in radian from 0 to 90.
 
         Args:
-            array (numpy.ndarray): Box in [x, y, w, h, r] format.
+            x (np.ndarray): Box in [x, y, w, h, r] format.
 
         Returns:
-            results (numpy.ndarray): Converted box in [[x1, y1], [x2, y2], [x3, y3], [x4, y4]] format.
+            y (list): Converted box in [(x1, y1), (x2, y2), (x3, y3), (x4, y4)] format.
         """
-        ctr = array[:2]
-        w, h, angle = array[2:]
+        ctr = x[:2]
+        w, h, angle = x[2:]
         cos_value, sin_value = np.cos(angle), np.sin(angle)
         vec1 = [w / 2 * cos_value, w / 2 * sin_value]
         vec2 = [-h / 2 * sin_value, h / 2 * cos_value]
@@ -292,58 +185,72 @@ class YOLOv8:
         pt2 = ctr + vec1 - vec2
         pt3 = ctr - vec1 - vec2
         pt4 = ctr - vec1 + vec2
+        y = [tuple(pt) for pt in np.stack([pt1, pt2, pt3, pt4]).astype(int)]
 
-        return np.stack([pt1, pt2, pt3, pt4]).astype(int)
+        return y
 
-    def obb_postproc(self, outs):
+    def detect_postproc(self, outs):
         """
-        Postprocess of obb model.
+        Postprocess of detect model.
 
         Args:
-            outs (list): Inference results from the model.
+            outs (np.ndarray): Inference results from the model.
 
         Returns:
             results (list): Filtered and formatted results.
-                            [[id, name, score, [x, y, w, h, r], [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]], ...].
+                            [[id, name, score, box, kpt, obb], ...].
         """
         nc = len(self.labels)  # number of classes
         outs = np.transpose(outs)
 
+        # Filter and reshape results
         max_scores = np.max(outs[:, 4:4 + nc], axis=1)
         class_ids = np.argmax(outs[:, 4:4 + nc], axis=1)
         valid_indices = np.where(max_scores >= self.conf_thres)
-        outs = np.hstack((
-            outs[:, :4][valid_indices],
-            outs[:, -1][valid_indices].reshape(-1, 1),
-            max_scores[valid_indices].reshape(-1, 1),
-            class_ids[valid_indices].reshape(-1, 1),
-        ))  # [[x, y, w, h, r, score, class_id], ...]
+        zeros = np.zeros((len(valid_indices[0]), 1))
 
-        # Restore bboxes to original size
-        x, y = outs[:, 0].copy(), outs[:, 1].copy()
-        w, h = outs[:, 2].copy(), outs[:, 3].copy()
+        raw_xywh = outs[:, :4][valid_indices]
+        raw_r = outs[:, -1][valid_indices].reshape(-1, 1) if self.task == 'obb' else zeros
+        raw_scores = max_scores[valid_indices].reshape(-1, 1)
+        raw_ids = class_ids[valid_indices].reshape(-1, 1)
+        raw_kpts = outs[:, 4 + nc:][valid_indices] if self.task == 'pose' else zeros
+
+        outs = np.hstack((raw_xywh, raw_r, raw_scores, raw_ids, raw_kpts))  # [[x, y, w, h, r, score, class_id, kpts], ...]
+
+        # Restore bboxes and keypoints to original size
         s, t, l = self.scale
-        outs[:, 0] = (x - l) / s
-        outs[:, 1] = (y - t) / s
-        outs[:, 2] = w / s
-        outs[:, 3] = h / s
-        outs[:, :4] = outs[:, :4].astype(int)
+        outs[:, :2] -= [l, t]
+        outs[:, :4] /= s
 
+        if self.task == 'pose':
+            x_cols = np.arange(7, outs.shape[1], 2)
+            y_cols = np.arange(8, outs.shape[1], 2)
+            outs[:, x_cols] = (outs[:, x_cols] - l) / s
+            outs[:, y_cols] = (outs[:, y_cols] - t) / s
+
+        # Prepare data for NMS
         boxes = outs[:, :4]
-        scores = outs[:, -2]
-        class_ids = outs[:, -1]
+        scores = outs[:, 5]
+        class_ids = outs[:, 6]
+        kpts = outs[:, 7:] if self.task == 'pose' else zeros
         indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf_thres, self.iou_thres)
 
         results = []
         for i in indices:
             class_id = int(class_ids[i])
-            class_name = self.labels[int(class_ids[i])]
+            class_name = self.labels[class_id]
             score = round(float(scores[i]), 4)
-            box = self.xywhr2xyxyxyxy(outs[:, :5][i]).tolist()
-            box_r_list = outs[:, :5][i].tolist()
-            box_r = [int(num) for num in box_r_list[:4]] + [round(box_r_list[4], 4)]
+            if self.task != 'obb':
+                box = self.xywh2xyxy(boxes[i])
+                obb = []
+            else:
+                box = self.xywhr2xyxyxyxy(outs[:, :5][i])
+                box_r_list = outs[:, :5][i]
+                obb = [int(num) for num in box_r_list[:4]] + [round(box_r_list[4], 4)]
+            kpt = kpts[i].astype(int) if self.task == 'pose' else []
+            kpt = list(zip(kpt[::2], kpt[1::2]))
 
-            results.append([class_id, class_name, score, box_r, box])
+            results.append([class_id, class_name, score, box, kpt, obb])
 
         return results
 
@@ -356,21 +263,18 @@ class YOLOv8:
 
         Returns:
             results (list): Filtered and formatted results.
-                            [[id, name, score, [(xmin, ymin), (w, h)]], ...].
+                            [[id, name, score, box, kpt, obb], ...].
         """
         outs = np.squeeze(outs)
 
         if self.task == 'classify':
-            results = self.classify_postproc(outs)
+            class_id = np.argmax(outs)
+            class_name = self.labels[class_id]
+            score = outs[class_id]
+            results = [[class_id, class_name, score]]
 
-        elif self.task == 'detect':
+        elif self.task in ['detect', 'pose', 'obb']:
             results = self.detect_postproc(outs)
-
-        elif self.task == 'pose':
-            results = self.pose_postproc(outs)
-
-        elif self.task == 'obb':
-            results = self.obb_postproc(outs)
 
         else:
             print('Unsupported task.')
@@ -383,7 +287,7 @@ class YOLOv8:
         Model inference process.
 
         Args:
-            im (numpy.ndarray): Image array.
+            im (np.ndarray): Image array.
 
         Returns:
             results (list): Inference results after postprocessing.
@@ -408,138 +312,97 @@ class YOLOv8:
         Visualize boxes based on filtered results.
 
         Args:
-            im (numpy.ndarray): Image array.
+            im (np.ndarray): Image array.
             results (list): Filtered results.
 
         Returns:
-            im (numpy.ndarray): Visualized image.
+            im (np.ndarray): Visualized image.
         """
         # Convert OpenCV image array to PIL image object
         image = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
         draw = ImageDraw.Draw(image)
-
-        # Determines the line width of bboxes
         im_w, im_h = image.size
-        lw = int(max(im_w, im_h) * 0.003) + 1 # line width
+
+        # Text height, text font and line width
+        th = 12 if min(im_w, im_h) < 600 else int(max(im_w, im_h) * 0.015)
+        font = ImageFont.truetype(self.font_path, th)
+        lw = int(max(im_w, im_h) * 0.003) + 1
 
         for i in results:
-            label_id, label_name, conf, ((xmin, ymin), (xmax, ymax)) = i[:4]
-            kpts = i[4:]  # empty list if it is not a pose model
-            color = self.colorset[label_id % len(self.colorset)]
+            label_id, label_name, conf, boxes, kpts, obb = i
+            label_color = self.colorset[label_id % len(self.colorset)]
+            label_text = f'{label_name} {conf * 100:.2f}%'
+            tw = int(draw.textlength(label_text, font=font))
 
-            # Draw bbox
-            draw.rectangle([(xmin, ymin), (xmax, ymax)], outline=color, width=lw)
+            if obb:  # Obb task
+                # Draw bbox
+                draw.polygon(boxes, outline=label_color, width=lw)
 
-            # Draw label
-            text = f'{label_name} {conf * 100:.2f}%'
-            if min(im_w, im_h) < 600:
-                th = 12
-            else:
-                th = int(max(im_w, im_h) * 0.015)
+                # Draw label
+                (x1, y1), (x2, y2), (x3, y3), (x4, y4) = boxes
+                draw.rectangle(
+                    [(x1, y1 - th - lw * 2), (x1 + tw + lw, y1)], 
+                    fill=label_color, 
+                    width=lw)
+                draw.text(
+                    (x1 + lw, y1 - th - lw), 
+                    label_text, 
+                    font=font, 
+                    fill=(255, 255, 255))
 
-            font = ImageFont.truetype(self.font_path, th)
-            tw = draw.textlength(text, font=font)
+            else:  # Not obb task
+                # Draw bbox
+                draw.rectangle(boxes, outline=label_color, width=lw)
 
-            x1 = xmin
-            y1 = ymin - th - lw
-            x2 = xmin + tw + lw
-            y2 = ymin
+                # Draw label
+                (xmin, ymin), (xmax, ymax) = boxes
+                x1 = xmin
+                y1 = ymin - th - lw
+                x2 = xmin + tw + lw
+                y2 = ymin
 
-            if y1 < 10:  # Label-top out of image
-                y1 = ymin
-                y2 = ymin + th + lw
+                if y1 < 10:  # Label-top out of image
+                    y1 = ymin
+                    y2 = ymin + th + lw
 
-            if x2 > im_w:  # Label-right out of image
-                x1 = im_w - tw - lw
-                x2 = im_w
+                if x2 > im_w:  # Label-right out of image
+                    x1 = im_w - tw - lw
+                    x2 = im_w
 
-            draw.rectangle(
-                [(x1, y1 - lw), (x2 + lw, y2)], 
-                fill=color, 
-                width=lw)
-            draw.text(
-                (x1 + lw, y1), 
-                text, 
-                font=font, 
-                fill=(255, 255, 255))
+                draw.rectangle(
+                    [(x1, y1 - lw), (x2 + lw, y2)], 
+                    fill=label_color, 
+                    width=lw)
+                draw.text(
+                    (x1 + lw, y1), 
+                    label_text, 
+                    font=font, 
+                    fill=(255, 255, 255))
 
-            # Draw keypoints
-            if kpts:
-                for idx, j in enumerate(kpts[0]):
-                    kpt_color = self.colorset[idx % len(self.colorset)]
-                    # top-left and bottom-right, lw as radius
-                    tl = (j[0] - lw, j[1] - lw)
-                    bw = (j[0] + lw, j[1] + lw) 
-                    draw.ellipse([tl, bw], fill=kpt_color)
+                # Draw keypoints
+                if kpts:
+                    for idx, j in enumerate(kpts):
+                        kpt_color = self.colorset[idx % len(self.colorset)]
+                        # top-left and bottom-right, lw as radius
+                        tl = (j[0] - lw, j[1] - lw)
+                        bw = (j[0] + lw, j[1] + lw) 
+                        draw.ellipse([tl, bw], fill=kpt_color)
 
         # Blend drawed image and src image for transparent labels
         drawed = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        cv2.addWeighted(drawed, 0.65, im, 0.35, 0, drawed)
-
-        return drawed
-
-    def draw_obb_boxes(self, im, results):
-        """
-        Visualize obb boxes based on filtered results.
-
-        Args:
-            im (numpy.ndarray): Image array.
-            results (list): Filtered results.
-
-        Returns:
-            im (numpy.ndarray): Visualized image.
-        """
-        # Convert OpenCV image array to PIL image object
-        image = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
-        draw = ImageDraw.Draw(image)
-
-        # Determines the line width of bboxes
-        im_w, im_h = image.size
-        lw = int(max(im_w, im_h) * 0.003) + 1 # line width
-
-        for i in results:
-            label_id, label_name, conf, _, ((x1, y1), (x2, y2), (x3, y3), (x4, y4)) = i
-            color = self.colorset[label_id % len(self.colorset)]
-
-            # Draw bbox
-            draw.polygon([(x1, y1), (x2, y2), (x3, y3), (x4, y4)], outline=color, width=lw)
-
-            # Draw label
-            text = f'{label_name} {conf * 100:.2f}%'
-            if min(im_w, im_h) < 600:
-                th = 12
-            else:
-                th = int(max(im_w, im_h) * 0.015)
-
-            font = ImageFont.truetype(self.font_path, th)
-            tw = int(draw.textlength(text, font=font))
-
-            draw.rectangle(
-                [(x1, y1 - th - lw * 2), (x1 + tw + lw, y1)], 
-                fill=color, 
-                width=lw)
-            draw.text(
-                (x1 + lw, y1 - th - lw), 
-                text, 
-                font=font, 
-                fill=(255, 255, 255))
-
-        # Blend drawed image and src image for transparent labels
-        drawed = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        cv2.addWeighted(drawed, 0.65, im, 0.35, 0, drawed)
+        cv2.addWeighted(drawed, 0.7, im, 0.3, 0, drawed)
 
         return drawed
 
     def save_visualization(self, im, results):
         """
         Create a save folder in the directory where the current image file is
-        located, and save the visualized images. When input is numpy.ndarray,
+        located, and save the visualized images. When input is np.ndarray,
         set the code file as an image file.
 
         Args:
-            im (numpy.ndarray): Image array.
+            im (np.ndarray): Image array.
             results (list): Inference results after postprocessing.
-
         """
         if self.visualize:
             if not self.save_dir:
@@ -554,11 +417,7 @@ class YOLOv8:
             os.makedirs(self.save_dir, exist_ok=True)
             save_name = os.path.basename(self.img_path) if self.img_path else 'visualized.jpg'
             save_path = os.path.join(self.save_dir, save_name)
-
-            if self.task != 'obb':
-                cv2.imwrite(save_path, self.draw_boxes(im, results))
-            else:
-                cv2.imwrite(save_path, self.draw_obb_boxes(im, results))
+            cv2.imwrite(save_path, self.draw_boxes(im, results))
 
             if self.im_count == 1:
                 print(f'Visualized result saved at: {save_path}')
@@ -637,6 +496,24 @@ class YOLOv10(YOLOv8):
         font_path (str): The path to the font file for visualization. Required if visualize is True.
     """
 
+    def xyxy2xywh(self, x):
+        """
+        Convert bounding box coordinates from xyxy to xywh.
+
+        Args:
+            x (np.ndarray): Box in [x1, y1, x2, y2] format
+
+        Returns:
+            y (np.ndarray): Converted box in [x, y, w, h] format.
+        """
+        y = np.empty_like(x)  # faster than clone/copy
+        y[:, 0] = (x[:, 0] + x[:, 2]) / 2  # x center
+        y[:, 1] = (x[:, 1] + x[:, 3]) / 2  # y center
+        y[:, 2] = x[:, 2] - x[:, 0]  # width
+        y[:, 3] = x[:, 3] - x[:, 1]  # height
+
+        return y
+
     def detect_postproc(self, outs):
         """
         Postprocess of detect model.
@@ -651,18 +528,12 @@ class YOLOv10(YOLOv8):
         scores = outs[:, 4]
         indices = np.where(scores > self.conf_thres)[0]
         outs = outs[indices, :]
-
-        # From xyxy to xywh
-        x1, y1 = outs[:, 0].copy(), outs[:, 1].copy()
-        x2, y2 = outs[:, 2].copy(), outs[:, 3].copy()
-        w, h = x2 - x1, y2 - y1
+        outs[:, :4] = self.xyxy2xywh(outs[:, :4])
 
         # Restore bboxes to original size
         s, t, l = self.scale
-        outs[:, 0] = (x1 - l) / s
-        outs[:, 1] = (y1 - t) / s
-        outs[:, 2] = w / s
-        outs[:, 3] = h / s
+        outs[:, :2] -= [l, t]
+        outs[:, :4] /= s
 
         boxes = outs[:, :4]
         scores = outs[:, -2]
@@ -671,12 +542,12 @@ class YOLOv10(YOLOv8):
         results = []
         for i in indices:
             class_id = int(class_ids[i])
-            class_name = self.labels[int(class_ids[i])]
+            class_name = self.labels[class_id]
             score = round(float(scores[i]), 4)
-            box = [(int(boxes[i][0]), int(boxes[i][1])), 
-                   (int(boxes[i][2]), int(boxes[i][3]))]
+            print(boxes[i])
+            box = self.xywh2xyxy(boxes[i])
 
-            results.append([class_id, class_name, score, box])
+            results.append([class_id, class_name, score, box, [], []])
 
         return results
 
