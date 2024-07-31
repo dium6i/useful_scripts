@@ -12,6 +12,7 @@ Update Log:
     2024-07-11: - Bug fixes.
     2024-07-12: - Bug fixes.
     2024-07-16: - Optimized output format.
+    2024-07-31: - Optimized code structure.
 
 """
 
@@ -38,6 +39,17 @@ class OCR:
         If costomized models need to be used, det_model_path and rec_model_path
         should be specified.
         """
+        self.colorset = [ # RGB
+            (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
+            (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
+            (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
+            ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
+            (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
+            (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
+            (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
+            (217, 134, 177), (133, 111, 102), 
+        ]
+
         self.engine = RapidOCR(
             text_score=text_score,
             det_model_path=det_model_path,
@@ -87,17 +99,6 @@ class OCR:
         Returns:
             im (numpy.ndarray): Visualized image.
         """
-        colorset = [ # RGB
-            (218, 179, 218), (138, 196, 208), (112, 112, 181), (255, 160, 100), 
-            (106, 161, 115), (232, 190,  93), (211, 132, 252), ( 77, 190, 238), 
-            (  0, 170, 128), (196, 100, 132), (153, 153, 153), (194, 194,  99), 
-            ( 74, 134, 255), (205, 110,  70), ( 93,  93, 135), (140, 160,  77), 
-            (255, 185, 155), (255, 107, 112), (165, 103, 190), (202, 202, 202), 
-            (  0, 114, 189), ( 85, 170, 128), ( 60, 106, 117), (250, 118, 153), 
-            (119, 172,  48), (171, 229, 232), (160,  85, 100), (223, 128,  83), 
-            (217, 134, 177), (133, 111, 102), 
-        ]
-
         h, w, _ = im.shape
         # create a white image to display results
         white_im = Image.new('RGB', (w, h), (255, 255, 255))
@@ -108,7 +109,7 @@ class OCR:
             bbox, wh, text, score = res
 
             # Draw box on original image
-            color = colorset[i % len(colorset)][::-1]
+            color = self.colorset[i % len(self.colorset)][::-1]
             overlay = im.copy()
             # convert bbox and reshape for cv2 functions
             points = np.array(bbox, np.int32).reshape((-1, 1, 2))
