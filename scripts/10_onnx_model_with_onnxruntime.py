@@ -27,6 +27,7 @@ Update Log:
     2024-07-18: - Bug fixes.
     2024-07-24: - Added support for YOLOv8 obb model.
     2024-07-30: - Adjusted code structure.
+    2024-08-12: - Bug fixes.
 
 """
 
@@ -159,6 +160,7 @@ class YOLOv8:
         y[:2] = xy - wh  # top left xy
         y[2:] = xy + wh  # bottom right xy
         y = y.astype(int)
+        y[y < 0] = 0
         y = list(zip(y[::2], y[1::2]))
 
         return y
