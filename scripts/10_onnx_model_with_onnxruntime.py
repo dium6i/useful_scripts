@@ -100,7 +100,8 @@ class YOLOv8:
         if self.thread_num != -1 and 1 <= self.thread_num <= cpu_nums:
             session_options.intra_op_num_threads = self.thread_num
 
-        self.session = InferenceSession(model_path, session_options)
+        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+        self.session = InferenceSession(model_path, session_options, providers=providers)
         self.input_name = self.session.get_inputs()[0].name
 
         model_info = self.session.get_modelmeta().custom_metadata_map
