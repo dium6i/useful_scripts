@@ -11,12 +11,12 @@ Update Log:
     2024-03-29: - Use cv2.dnn.NMSBoxes() to replace the customized NMS method.
     2024-04-30: - Keep the method of doing NMS in xyxy.
     2024-05-10: - Removed the option to include category names in the results.
-                - Adapted inference for YOLOv8 classify model.
+                - Added support for YOLOv8 classify model.
                 - Modified image preprocessing to proportional scaling and padding.
                 - Fixed issue with GPU inference failures.
     2024-06-07: - Added support for YOLOv10 (detect).
     2024-07-02: - Adjusted code structure.
-                - Adapted inference for YOLOv8 pose model.
+                - Added support for YOLOv8 pose model.
     2024-07-03: - Adjusted code structure.
     2024-07-04: - Adjusted code structure.
     2024-07-09: - Change bbox format from xywh to xyxy.
@@ -28,12 +28,14 @@ Update Log:
     2024-07-24: - Added support for YOLOv8 obb model.
     2024-07-30: - Adjusted code structure.
     2024-08-12: - Bug fixes.
+    2024-08-14: - Added support for saving inference results as VOC format.
 
 """
 
 import ast
 import os
 import time
+import xml.etree.ElementTree as ET
 
 import cv2
 import numpy as np
@@ -104,7 +106,7 @@ class YOLOv8:
         model_info = self.session.get_modelmeta().custom_metadata_map
         self.labels = ast.literal_eval(model_info['names'])  # {0: 'cat', ...}
         self.imgsz = ast.literal_eval(model_info['imgsz'])  # [640, 640]
-        self.task = model_info['task']  # detect, classify, pose
+        self.task = model_info['task']  # detect, classify, pose, obb
         self.kpt_shape = (
             ast.literal_eval(model_info['kpt_shape'])
             if 'kpt_shape' in model_info
@@ -396,35 +398,105 @@ class YOLOv8:
 
         return drawed
 
-    def save_visualization(self, im, results):
+    def create_xml(self, results, save_path):
+        # Create the root element
+        annotation = ET.Element('annotation')
+
+        # Add child elements to the root
+        folder = ET.SubElement(annotation, 'folder')
+        filename = ET.SubElement(annotation, 'filename')
+        path = ET.SubElement(annotation, 'path')
+        source = ET.SubElement(annotation, 'source')
+        database = ET.SubElement(source, 'database')
+        size = ET.SubElement(annotation, 'size')
+        width = ET.SubElement(size, 'width')
+        height = ET.SubElement(size, 'height')
+        depth = ET.SubElement(size, 'depth')
+        segmented = ET.SubElement(annotation, 'segmented')
+
+        file_name = os.path.basename(self.img_path) if self.img_path else 'test_image.jpg'
+        folder.text = 'JPEGImages'
+        filename.text = file_name
+        path.text = '/work/' + file_name
+        database.text = 'Unknown'
+        height.text, width.text, depth.text = map(str, self.im_array.shape)
+        segmented.text = '0'
+
+        # Sort the results list by the name field (result[1])
+        results_sorted = sorted(results, key=lambda x: x[1])
+
+        # Iterate through the data list and create object elements for each item
+        for result in results_sorted:
+            obj = ET.SubElement(annotation, 'object')
+            name = ET.SubElement(obj, 'name')
+            pose = ET.SubElement(obj, 'pose')
+            truncated = ET.SubElement(obj, 'truncated')
+            difficult = ET.SubElement(obj, 'difficult')
+
+            name.text = result[1]
+            pose.text = 'Unspecified'
+            truncated.text = '0'
+            difficult.text = '0'
+
+            bndbox = ET.SubElement(obj, 'bndbox')
+            xmin = ET.SubElement(bndbox, 'xmin')
+            ymin = ET.SubElement(bndbox, 'ymin')
+            xmax = ET.SubElement(bndbox, 'xmax')
+            ymax = ET.SubElement(bndbox, 'ymax')
+
+            (x1, y1), (x2, y2) = result[3]
+            xmin.text, ymin.text, xmax.text, ymax.text = map(str, [x1, y1, x2, y2])
+
+        tree = ET.ElementTree(annotation)
+        ET.indent(tree, space='\t', level=0)
+        tree.write(save_path, encoding='utf-8')
+
+    def save_results(self, im, results):
         """
-        Create a save folder in the directory where the current image file is
-        located, and save the visualized images. When input is np.ndarray,
-        set the code file as an image file.
+        Create a save folder and save the visualized images or annotation
+        files. When input is np.ndarray, set the code file as an image file.
 
         Args:
             im (np.ndarray): Image array.
             results (list): Inference results after postprocessing.
         """
+        if not (self.visualize or self.save_xml):
+            return
+
+        if not self.save_dir:
+            # os.path.abspath(__file__) is the path of current code file.
+            current_file = self.img_path if self.img_path else os.path.abspath(__file__)
+            current_file_dir = os.path.dirname(current_file)
+            self.save_dir = os.path.join(current_file_dir, 'Infer_Results')
+
+        elif self.save_dir and os.path.isfile(self.save_dir):
+            self.save_dir = os.path.join(os.path.dirname(self.save_dir), 'Infer_Results')
+
         if self.visualize:
-            if not self.save_dir:
-                # os.path.abspath(__file__) is the path of current code file.
-                current_file = self.img_path if self.img_path else os.path.abspath(__file__)
-                current_file_dir = os.path.dirname(current_file)
-                self.save_dir = os.path.join(current_file_dir, 'visualized')
-
-            elif self.save_dir and os.path.isfile(self.save_dir):
-                self.save_dir = os.path.join(os.path.dirname(self.save_dir), 'visualized')
-
-            os.makedirs(self.save_dir, exist_ok=True)
+            self.visualize_dir = os.path.join(self.save_dir, 'Visualized')
+            os.makedirs(self.visualize_dir, exist_ok=True)
             save_name = os.path.basename(self.img_path) if self.img_path else 'visualized.jpg'
-            save_path = os.path.join(self.save_dir, save_name)
+            save_path = os.path.join(self.visualize_dir, save_name)
             cv2.imwrite(save_path, self.draw_boxes(im, results))
 
             if self.im_count == 1:
                 print(f'Visualized result saved at: {save_path}')
 
-    def predict(self, im, save_dir=None, visualize=False, font_path=None):
+        if self.save_xml and self.task == 'detect':
+            self.xmls_dir = os.path.join(self.save_dir, 'Annotations')
+            os.makedirs(self.xmls_dir, exist_ok=True)
+            if self.img_path:
+                base, ext = os.path.splitext(os.path.basename(self.img_path))
+                save_name = base + '.xml'
+            else:
+                save_name = 'annotation.xml'
+            save_path = os.path.join(self.xmls_dir, save_name)
+            self.create_xml(results, save_path)
+
+            if self.im_count == 1:
+                print(f'Annotation result saved at: {save_path}')
+
+    def predict(self, im, save_dir=None, visualize=False, font_path=None, save_xml=False):
         """
         Run model inference on the input image.
 
@@ -437,22 +509,26 @@ class YOLOv8:
         self.save_dir = save_dir
         self.visualize = visualize if self.task != 'classify' else False
         self.font_path = font_path
+        self.save_xml = save_xml
+        if self.save_xml and self.task != 'detect':
+            print('save_xml ony support detect model.')
 
         # numpy array as input
         if isinstance(im, np.ndarray):
             self.im_count = 1
             self.img_path = False
+            self.im_array = im
             results = self.model_infer(im)
-            self.save_visualization(im, results)
+            self.save_results(im, results)
 
         # path as input
         elif isinstance(im, str):
             if os.path.isfile(im):  # Single image
                 self.im_count = 1
                 self.img_path = im
-                im_array = cv2.imread(im)
-                results = self.model_infer(im_array)
-                self.save_visualization(im_array, results)
+                self.im_array = cv2.imread(im)
+                results = self.model_infer(self.im_array)
+                self.save_results(self.im_array, results)
 
             else:  # Directory of images
                 self.im_count = -1
@@ -462,15 +538,17 @@ class YOLOv8:
                 for img in tqdm(img_list, total=len(img_list), desc='Processing'):
                     img_path = os.path.join(im, img)
                     self.img_path = img_path
-                    im_array = cv2.imread(img_path)
-                    results, dt = self.model_infer(im_array)
-                    self.save_visualization(im_array, results)
+                    self.im_array = cv2.imread(img_path)
+                    results, dt = self.model_infer(self.im_array)
+                    self.save_results(self.im_array, results)
                     t += dt
 
                 print(f'Inference time:\n    Total: {t * 1000:.2f} ms')
                 print(f'    Avg: {t * 1000 / len(img_list):.2f} ms')
                 if self.visualize:
-                    print(f'Visualized results saved at: {self.save_dir}')
+                    print(f'Visualized results saved at: {self.visualize_dir}')
+                if self.save_xml and self.task == 'detect':
+                    print(f'Annotation result saved at: {self.xmls_dir}')
                 results = None
 
         # unsupported input
@@ -564,6 +642,7 @@ if __name__ == '__main__':
     results = model.predict(
         image_dir,
         save_dir,
-        visualize=True,
-        font_path=font_path
+        visualize=False,
+        font_path=font_path,
+        save_xml=True  # Only support detect model
         )
