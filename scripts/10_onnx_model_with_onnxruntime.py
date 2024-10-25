@@ -512,7 +512,7 @@ class YOLOv8:
         self.font_path = font_path
         self.save_xml = save_xml
         if self.save_xml and self.task != 'detect':
-            print('save_xml ony support detect model.')
+            print('save_xml only support detect model.')
 
         # numpy array as input
         if isinstance(im, np.ndarray):
