@@ -29,6 +29,8 @@ Update Log:
     2024-07-30: - Adjusted code structure.
     2024-08-12: - Bug fixes.
     2024-08-14: - Added support for saving inference results as VOC format.
+    2024-10-26: - Change np.int64 to np.int16 to reduce memory usage and possibly
+                  improve performance.
 
 """
 
@@ -162,7 +164,7 @@ class YOLOv8:
         wh = x[2:] / 2  # half width-height
         y[:2] = xy - wh  # top left xy
         y[2:] = xy + wh  # bottom right xy
-        y = y.astype(int)
+        y = y.astype(np.int16)
         y[y < 0] = 0
         y = list(zip(y[::2], y[1::2]))
 
@@ -190,7 +192,7 @@ class YOLOv8:
         pt2 = ctr + vec1 - vec2
         pt3 = ctr - vec1 - vec2
         pt4 = ctr - vec1 + vec2
-        y = [tuple(pt) for pt in np.stack([pt1, pt2, pt3, pt4]).astype(int)]
+        y = [tuple(pt) for pt in np.stack([pt1, pt2, pt3, pt4]).astype(np.int16)]
 
         return y
 
@@ -252,7 +254,7 @@ class YOLOv8:
                 box = self.xywhr2xyxyxyxy(outs[:, :5][i])
                 box_r_list = outs[:, :5][i]
                 obb = [int(num) for num in box_r_list[:4]] + [round(box_r_list[4], 4)]
-            kpt = kpts[i].astype(int) if self.task == 'pose' else []
+            kpt = kpts[i].astype(np.int16) if self.task == 'pose' else []
             kpt = list(zip(kpt[::2], kpt[1::2]))
 
             results.append([class_id, class_name, score, box, kpt, obb])
