@@ -31,6 +31,7 @@ Update Log:
     2024-08-14: - Added support for saving inference results as VOC format.
     2024-10-26: - Change np.int64 to np.int16 to reduce memory usage and possibly
                   improve performance.
+    2024-11-30: - Minor performance improvements and code optimizations.
 
 """
 
@@ -126,7 +127,7 @@ class YOLOv8:
         Returns:
             im (np.ndarray): Preprocessed image data.
         """
-        im = cv2.cvtColor(im.copy(), cv2.COLOR_BGR2RGB)
+        im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
         h, w, _ = im.shape
         imgsz = self.imgsz[0]
         ratio = min(imgsz / h, imgsz / w)
@@ -143,7 +144,7 @@ class YOLOv8:
         color = [127, 127, 127]  # Pad with gray pixels
         im = cv2.copyMakeBorder(im, t, b, l, r, cv2.BORDER_CONSTANT, value=color)
 
-        im = np.array(im) / 255.0
+        im = im.astype(np.float32) / 255.0
         im = np.transpose(im, (2, 0, 1))  # Channel first
         im = np.expand_dims(im, axis=0).astype(np.float32)
 
@@ -521,8 +522,8 @@ class YOLOv8:
             self.im_count = 1
             self.img_path = False
             self.im_array = im
-            results = self.model_infer(im)
-            self.save_results(im, results)
+            results = self.model_infer(self.im_array)
+            self.save_results(self.im_array, results)
 
         # path as input
         elif isinstance(im, str):
