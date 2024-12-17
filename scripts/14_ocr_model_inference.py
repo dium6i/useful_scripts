@@ -13,6 +13,7 @@ Update Log:
     2024-07-12: - Bug fixes.
     2024-07-16: - Optimized output format.
     2024-07-31: - Optimized code structure.
+    2024-12-17: - Bug fixes.
 
 """
 
@@ -69,7 +70,7 @@ class OCR:
             dt (float): Inference time.
         """
         t0 = time.time()
-        res, _ = self.engine(im, use_det=True, use_cls=False, use_rec=True)
+        res, _ = self.engine(im.copy(), use_det=True, use_cls=False, use_rec=True)
         dt = time.time() - t0
 
         # Rearrange and filter res
