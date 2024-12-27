@@ -92,7 +92,7 @@ def pdf_to_images(pdf_path, dpi=200, format='jpg'):
             doc.close()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     pdf_path = 'path/to/pdf/file.pdf'
     pdf_to_images(
         pdf_path,
