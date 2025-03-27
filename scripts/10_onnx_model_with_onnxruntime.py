@@ -32,6 +32,8 @@ Update Log:
     2024-10-26: - Change np.int64 to np.int16 to reduce memory usage and possibly
                   improve performance.
     2024-11-30: - Minor performance improvements and code optimizations.
+    2025-03-27: - Improved performance by adding interpolation=cv2.INTER_AREA when
+                  using cv2.resize() to resize(scale down) image.
 
 """
 
@@ -133,7 +135,7 @@ class YOLOv8:
         ratio = min(imgsz / h, imgsz / w)
 
         new_h, new_w = int(h * ratio), int(w * ratio)
-        im = cv2.resize(im, (new_w, new_h))
+        im = cv2.resize(im, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
         dh = imgsz - new_h  # Total added pixels in height.
         dw = imgsz - new_w  # Total added pixels in width.
