@@ -34,6 +34,8 @@ Update Log:
     2024-11-30: - Minor performance improvements and code optimizations.
     2025-03-27: - Improved performance by adding interpolation=cv2.INTER_AREA when
                   using cv2.resize() to resize(scale down) image.
+    2025-04-03: - Added different method for downscaling and upscaling when
+                  resizing image.
 
 """
 
@@ -135,7 +137,13 @@ class YOLOv8:
         ratio = min(imgsz / h, imgsz / w)
 
         new_h, new_w = int(h * ratio), int(w * ratio)
-        im = cv2.resize(im, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        # For faster speed, use cv2.INTER_LINEAR.
+        if new_h < h:
+            im = cv2.resize(im, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        elif new_h > h:
+            im = cv2.resize(im, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+        else:
+            pass
 
         dh = imgsz - new_h  # Total added pixels in height.
         dw = imgsz - new_w  # Total added pixels in width.
